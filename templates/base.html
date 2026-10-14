@@ -10,6 +10,10 @@
     <a href="/">Inicio</a> |
     {% if session.get("usuario_id") %}
       <a href="/perfil">Mi perfil</a> |
+      <a href="/matches">Coincidencias</a> |
+      <a href="/acuerdos">Mis acuerdos</a> |
+      <a href="/certificacion">Certificación</a> |
+      <a href="/calificaciones">Calificaciones</a> |
       <a href="/logout">Cerrar sesión ({{ session["nombre"] }})</a>
     {% else %}
       <a href="/registro">Registro</a> |

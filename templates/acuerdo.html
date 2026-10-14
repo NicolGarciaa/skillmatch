@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h2>Proponer acuerdo</h2>
+<p>
+  Con <strong>{{ su["usuario_nombre"] }}</strong>, que ofrece:
+  [{{ su["categoria"] }}] {{ su["nombre"] }} — ${{ su["valor"] }}
+</p>
+
+{% if not mis_ofrezco %}
+  <p>Para proponer un acuerdo necesitas tener al menos una habilidad que ofreces. Agrégala en <a href="/perfil">Mi perfil</a>.</p>
+{% else %}
+  <form method="get">
+    <p>
+      <label>¿Qué ofreces tú a cambio?
+        <select name="mi">
+          {% for h in mis_ofrezco %}
+            <option value="{{ h['id'] }}" {% if mi and mi["id"] == h["id"] %}selected{% endif %}>
+              [{{ h["categoria"] }}] {{ h["nombre"] }} — ${{ h["valor"] }}
+            </option>
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit">Calcular</button>
+    </p>
+  </form>
+
+  {% if mi %}
+    <h3>Cálculo del acuerdo</h3>
+    <ul>
+      <li>Tú ofreces: {{ mi["nombre"] }} — ${{ mi["valor"] }}</li>
+      <li>Recibes: {{ su["nombre"] }} — ${{ su["valor"] }}</li>
+    </ul>
+    <p><strong>{{ resultado }}</strong></p>
+    <form method="post">
+      <input type="hidden" name="mi" value="{{ mi['id'] }}">
+      <button type="submit">Enviar propuesta</button>
+    </form>
+  {% endif %}
+{% endif %}
+{% endblock %}

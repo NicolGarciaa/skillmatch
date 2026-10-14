@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h2>Mis acuerdos</h2>
+{% if not acuerdos %}
+  <p>Aún no tienes acuerdos. Busca una propuesta en <a href="/matches">Coincidencias</a>.</p>
+{% else %}
+  <ul>
+  {% for a in acuerdos %}
+    <li>
+      <p>
+        {% if a.soy_proponente %}Propuesta enviada a{% else %}Propuesta recibida de{% endif %}
+        <strong>{{ a.otro_nombre }}</strong> — Estado: <strong>{{ a.estado }}</strong>
+      </p>
+      <p>Tú das: {{ a.doy_nombre }} (${{ a.doy_valor }}) · Tú recibes: {{ a.recibo_nombre }} (${{ a.recibo_valor }})</p>
+      <p>{{ a.resultado }}</p>
+      {% if not a.soy_proponente and a.estado == "propuesto" %}
+        <form method="post" action="/acuerdo/{{ a.id }}/responder" style="display:inline">
+          <button type="submit" name="accion" value="aceptado">Aceptar</button>
+          <button type="submit" name="accion" value="rechazado">Rechazar</button>
+        </form>
+      {% endif %}
+    </li>
+  {% endfor %}
+  </ul>
+{% endif %}
+{% endblock %}

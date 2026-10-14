@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h2>Certificación de habilidades</h2>
+<p><em>Diseño de pantalla (prototipo visual). La validación real por certificadores se implementará en una fase posterior.</em></p>
+<table border="1" cellpadding="6">
+  <tr><th>Habilidad</th><th>Estado</th><th>Certificador</th><th>Acción</th></tr>
+  <tr><td>Clases de Python (ejemplo)</td><td>Certificada</td><td>Certificador A</td><td>—</td></tr>
+  <tr><td>Diseño de logos (ejemplo)</td><td>En revisión</td><td>Certificador B</td><td>—</td></tr>
+  <tr><td>Clases de inglés (ejemplo)</td><td>Sin certificar</td><td>—</td><td><button disabled>Solicitar certificación</button></td></tr>
+</table>
+{% endblock %}

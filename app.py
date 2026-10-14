@@ -1,5 +1,7 @@
 import os
+import re
 import sqlite3
+import unicodedata
 from functools import wraps
 from flask import (Flask, render_template, request, redirect,
                    url_for, flash, session)
@@ -14,6 +16,28 @@ DB = os.path.join(app.instance_path, "skillmatch.db")
 
 CATEGORIAS = ["Programación", "Diseño", "Idiomas", "Música",
               "Marketing", "Matemáticas", "Otro"]
+
+
+PALABRAS_VACIAS = {"clases", "clase", "curso", "ayuda", "del", "las", "los", "una",
+                   "uno", "unos", "unas", "para", "con", "por", "que", "mis", "tus"}
+
+
+def palabras_clave(texto):
+    """Palabras relevantes de un texto: sin tildes, minúsculas, 3+ letras."""
+    t = unicodedata.normalize("NFD", texto.lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    return {p for p in re.findall(r"[a-z0-9]+", t)
+            if len(p) >= 3 and p not in PALABRAS_VACIAS}
+
+
+def calcular_diferencia(valor_doy, valor_recibo):
+    """Devuelve (diferencia, texto) desde el punto de vista de quien da 'valor_doy'."""
+    dif = valor_doy - valor_recibo
+    if dif == 0:
+        return 0, "Intercambio equilibrado: ambas habilidades tienen el mismo valor."
+    if dif > 0:
+        return dif, f"Lo que ofreces vale ${dif} más. La otra persona te compensa con ${dif}."
+    return dif, f"Lo que recibes vale ${-dif} más. Tú compensas con ${-dif}."
 
 
 def get_db():
@@ -42,6 +66,21 @@ def init_db():
                 nombre TEXT NOT NULL,
                 valor INTEGER NOT NULL DEFAULT 0,
                 FOREIGN KEY (usuario_id) REFERENCES usuarios (id)
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS acuerdos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                proponente_id INTEGER NOT NULL,
+                receptor_id INTEGER NOT NULL,
+                nombre_prop TEXT NOT NULL,
+                valor_prop INTEGER NOT NULL,
+                nombre_rec TEXT NOT NULL,
+                valor_rec INTEGER NOT NULL,
+                estado TEXT NOT NULL DEFAULT 'propuesto'
+                    CHECK (estado IN ('propuesto', 'aceptado', 'rechazado')),
+                FOREIGN KEY (proponente_id) REFERENCES usuarios (id),
+                FOREIGN KEY (receptor_id) REFERENCES usuarios (id)
             )
         """)
     conn.close()
@@ -174,6 +213,167 @@ def eliminar_habilidad(habilidad_id):
     conn.close()
     flash("Habilidad eliminada.")
     return redirect(url_for("perfil"))
+
+
+@app.route("/matches")
+@login_requerido
+def matches():
+    yo = session["usuario_id"]
+    conn = get_db()
+    mis_busco = conn.execute(
+        "SELECT * FROM habilidades WHERE usuario_id = ? AND tipo = 'busco'", (yo,)
+    ).fetchall()
+    mis_ofrezco = conn.execute(
+        "SELECT * FROM habilidades WHERE usuario_id = ? AND tipo = 'ofrezco'", (yo,)
+    ).fetchall()
+    ofrecen = conn.execute(
+        "SELECT h.*, u.nombre AS usuario_nombre FROM habilidades h "
+        "JOIN usuarios u ON u.id = h.usuario_id "
+        "WHERE h.usuario_id != ? AND h.tipo = 'ofrezco'", (yo,)
+    ).fetchall()
+    buscan = conn.execute(
+        "SELECT * FROM habilidades WHERE usuario_id != ? AND tipo = 'busco'", (yo,)
+    ).fetchall()
+    conn.close()
+
+    mis_categorias = {h["categoria"] for h in mis_ofrezco}
+    resultados = []
+    for b in mis_busco:
+        kw_b = palabras_clave(b["nombre"])
+        for o in ofrecen:
+            if o["categoria"] != b["categoria"]:
+                continue
+            comunes = sorted(kw_b & palabras_clave(o["nombre"]))
+            mutuo_info = [x["nombre"] for x in buscan
+                          if x["usuario_id"] == o["usuario_id"]
+                          and x["categoria"] in mis_categorias]
+            resultados.append({
+                "otro_nombre": o["usuario_nombre"],
+                "su_hab": o,
+                "mi_busco": b,
+                "score": 1 + len(comunes),
+                "kw": comunes,
+                "mutuo": bool(mutuo_info),
+                "mutuo_info": mutuo_info,
+            })
+    resultados.sort(key=lambda m: (m["mutuo"], m["score"]), reverse=True)
+    return render_template("matches.html", matches=resultados,
+                           tiene_busco=bool(mis_busco))
+
+
+@app.route("/acuerdo/<int:su_id>", methods=["GET", "POST"])
+@login_requerido
+def acuerdo(su_id):
+    yo = session["usuario_id"]
+    conn = get_db()
+    su = conn.execute(
+        "SELECT h.*, u.nombre AS usuario_nombre FROM habilidades h "
+        "JOIN usuarios u ON u.id = h.usuario_id "
+        "WHERE h.id = ? AND h.tipo = 'ofrezco' AND h.usuario_id != ?", (su_id, yo)
+    ).fetchone()
+    if su is None:
+        conn.close()
+        flash("Esa habilidad no está disponible para un acuerdo.")
+        return redirect(url_for("matches"))
+
+    mis_ofrezco = conn.execute(
+        "SELECT * FROM habilidades WHERE usuario_id = ? AND tipo = 'ofrezco' ORDER BY id",
+        (yo,),
+    ).fetchall()
+
+    try:
+        mi_id = int(request.values.get("mi", ""))
+    except ValueError:
+        mi_id = None
+    mi = next((h for h in mis_ofrezco if h["id"] == mi_id), None)
+
+    if request.method == "POST":
+        if mi is None:
+            conn.close()
+            flash("Elige una de tus habilidades para proponer el acuerdo.")
+            return redirect(url_for("acuerdo", su_id=su_id))
+        with conn:
+            conn.execute(
+                "INSERT INTO acuerdos (proponente_id, receptor_id, nombre_prop, "
+                "valor_prop, nombre_rec, valor_rec) VALUES (?, ?, ?, ?, ?, ?)",
+                (yo, su["usuario_id"], mi["nombre"], mi["valor"],
+                 su["nombre"], su["valor"]),
+            )
+        conn.close()
+        flash("Propuesta enviada.")
+        return redirect(url_for("acuerdos"))
+
+    conn.close()
+    resultado = None
+    if mi is not None:
+        _, resultado = calcular_diferencia(mi["valor"], su["valor"])
+    return render_template("acuerdo.html", su=su, mis_ofrezco=mis_ofrezco,
+                           mi=mi, resultado=resultado)
+
+
+@app.route("/acuerdos")
+@login_requerido
+def acuerdos():
+    yo = session["usuario_id"]
+    conn = get_db()
+    filas = conn.execute(
+        "SELECT a.*, up.nombre AS nombre_proponente, ur.nombre AS nombre_receptor "
+        "FROM acuerdos a "
+        "JOIN usuarios up ON up.id = a.proponente_id "
+        "JOIN usuarios ur ON ur.id = a.receptor_id "
+        "WHERE a.proponente_id = ? OR a.receptor_id = ? ORDER BY a.id DESC", (yo, yo)
+    ).fetchall()
+    conn.close()
+
+    lista = []
+    for a in filas:
+        soy_proponente = a["proponente_id"] == yo
+        if soy_proponente:
+            doy_n, doy_v = a["nombre_prop"], a["valor_prop"]
+            rec_n, rec_v = a["nombre_rec"], a["valor_rec"]
+            otro = a["nombre_receptor"]
+        else:
+            doy_n, doy_v = a["nombre_rec"], a["valor_rec"]
+            rec_n, rec_v = a["nombre_prop"], a["valor_prop"]
+            otro = a["nombre_proponente"]
+        _, texto = calcular_diferencia(doy_v, rec_v)
+        lista.append({
+            "id": a["id"], "estado": a["estado"], "soy_proponente": soy_proponente,
+            "otro_nombre": otro, "doy_nombre": doy_n, "doy_valor": doy_v,
+            "recibo_nombre": rec_n, "recibo_valor": rec_v, "resultado": texto,
+        })
+    return render_template("acuerdos.html", acuerdos=lista)
+
+
+@app.route("/acuerdo/<int:acuerdo_id>/responder", methods=["POST"])
+@login_requerido
+def responder_acuerdo(acuerdo_id):
+    accion = request.form.get("accion")
+    if accion not in ("aceptado", "rechazado"):
+        flash("Acción no válida.")
+        return redirect(url_for("acuerdos"))
+    conn = get_db()
+    with conn:
+        cur = conn.execute(
+            "UPDATE acuerdos SET estado = ? "
+            "WHERE id = ? AND receptor_id = ? AND estado = 'propuesto'",
+            (accion, acuerdo_id, session["usuario_id"]),
+        )
+    conn.close()
+    flash(f"Propuesta {accion}." if cur.rowcount else "No se pudo actualizar esa propuesta.")
+    return redirect(url_for("acuerdos"))
+
+
+@app.route("/certificacion")
+@login_requerido
+def certificacion():
+    return render_template("certificacion.html")
+
+
+@app.route("/calificaciones")
+@login_requerido
+def calificaciones():
+    return render_template("calificaciones.html")
 
 
 if __name__ == "__main__":
