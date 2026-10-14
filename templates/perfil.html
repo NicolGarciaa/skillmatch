@@ -2,6 +2,11 @@
 {% block contenido %}
 <h2>Mi perfil</h2>
 <p>Nombre: {{ session["nombre"] }}</p>
+{% if rep %}
+  <p>Reputación: <span class="rep">{{ rep[0]|estrellas }} {{ rep[0] }} ({{ rep[1] }} calificaciones)</span></p>
+{% else %}
+  <p>Reputación: aún no tienes calificaciones.</p>
+{% endif %}
 
 <h3>Agregar habilidad</h3>
 <form method="post">

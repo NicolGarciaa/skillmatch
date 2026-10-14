@@ -13,6 +13,13 @@
       </p>
       <p>Tú das: {{ a.doy_nombre }} (${{ a.doy_valor }}) · Tú recibes: {{ a.recibo_nombre }} (${{ a.recibo_valor }})</p>
       <p>{{ a.resultado }}</p>
+      {% if a.estado == "aceptado" %}
+        {% if a.ya_califique %}
+          <p>✔ Ya calificaste este intercambio.</p>
+        {% else %}
+          <p><a href="/calificar/{{ a.id }}">Calificar a {{ a.otro_nombre }}</a></p>
+        {% endif %}
+      {% endif %}
       {% if not a.soy_proponente and a.estado == "propuesto" %}
         <form method="post" action="/acuerdo/{{ a.id }}/responder" style="display:inline">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

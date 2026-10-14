@@ -1,16 +1,52 @@
 {% extends "base.html" %}
 {% block contenido %}
 <h2>Calificaciones y comentarios</h2>
-<p><em>Diseño de pantalla (prototipo visual). El sistema de calificación funcional se implementará en una fase posterior.</em></p>
-<h3>Calificar un intercambio (ejemplo)</h3>
-<p><label>Puntuación:
-  <select disabled><option>5 estrellas</option><option>4 estrellas</option><option>3 estrellas</option></select>
-</label></p>
-<p><label>Comentario:<br><textarea rows="3" cols="40" disabled placeholder="Cuenta cómo fue el intercambio"></textarea></label></p>
-<p><button disabled>Enviar calificación</button></p>
-<h3>Comentarios recibidos (ejemplo)</h3>
+
+{% if rep %}
+  <p>Tu reputación: <span class="rep">{{ rep[0]|estrellas }} {{ rep[0] }} ({{ rep[1] }} calificaciones)</span></p>
+{% else %}
+  <p>Tu reputación: aún no tienes calificaciones.</p>
+{% endif %}
+
+<h3>Intercambios por calificar</h3>
+{% if pendientes %}
 <ul>
-  <li>★★★★★ "Muy puntual y claro explicando." — Usuario de ejemplo</li>
-  <li>★★★★☆ "Buen intercambio, lo recomiendo." — Usuario de ejemplo</li>
+  {% for p in pendientes %}
+    <li>
+      Intercambio con <strong>{{ p["otro_nombre"] }}</strong> (recibiste: {{ p["recibo_nombre"] }}).
+      <a href="/calificar/{{ p['id'] }}">Calificar</a>
+    </li>
+  {% endfor %}
 </ul>
+{% else %}
+  <p>No tienes intercambios pendientes por calificar. Aparecen aquí cuando un acuerdo es aceptado.</p>
+{% endif %}
+
+<h3>Calificaciones que recibiste</h3>
+{% if recibidas %}
+<ul>
+  {% for c in recibidas %}
+    <li>
+      <span class="rep">{{ c["puntuacion"]|estrellas }}</span> de <strong>{{ c["de_nombre"] }}</strong>
+      {% if c["comentario"] %}<p>"{{ c["comentario"] }}"</p>{% endif %}
+    </li>
+  {% endfor %}
+</ul>
+{% else %}
+  <p>Aún no has recibido calificaciones.</p>
+{% endif %}
+
+<h3>Calificaciones que hiciste</h3>
+{% if hechas %}
+<ul>
+  {% for c in hechas %}
+    <li>
+      <span class="rep">{{ c["puntuacion"]|estrellas }}</span> para <strong>{{ c["para_nombre"] }}</strong>
+      {% if c["comentario"] %}<p>"{{ c["comentario"] }}"</p>{% endif %}
+    </li>
+  {% endfor %}
+</ul>
+{% else %}
+  <p>Aún no has calificado a nadie.</p>
+{% endif %}
 {% endblock %}

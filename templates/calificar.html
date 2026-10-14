@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h2>Calificar intercambio</h2>
+<p>Intercambio con <strong>{{ otro_nombre }}</strong> (recibiste: {{ recibo }}).</p>
+<form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+  <p>
+    <label>Puntuación:
+      <select name="puntuacion">
+        <option value="5">5 — Excelente ★★★★★</option>
+        <option value="4">4 — Muy bueno ★★★★☆</option>
+        <option value="3">3 — Bueno ★★★☆☆</option>
+        <option value="2">2 — Regular ★★☆☆☆</option>
+        <option value="1">1 — Malo ★☆☆☆☆</option>
+      </select>
+    </label>
+  </p>
+  <p>
+    <label>Comentario (opcional, máximo 300 caracteres):
+      <textarea name="comentario" rows="4" maxlength="300" placeholder="Cuenta cómo fue el intercambio"></textarea>
+    </label>
+  </p>
+  <button type="submit">Enviar calificación</button>
+</form>
+<p><a href="/calificaciones">Volver</a></p>
+{% endblock %}

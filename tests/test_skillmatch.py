@@ -307,6 +307,123 @@ class PruebasSeguridad(BaseTest):
         self.assertIn("incorrectos", texto(r))
 
 
+class PruebasCalificaciones(BaseTest):
+    def aceptado(self, a, b, hab_a, val_a, hab_b, val_b, cat_a="Programación", cat_b="Diseño"):
+        """Crea un acuerdo aceptado: 'a' propone y 'b' acepta. Devuelve el id del acuerdo."""
+        self.agregar(a, "ofrezco", cat_a, hab_a, val_a)
+        self.agregar(b, "ofrezco", cat_b, hab_b, val_b)
+        a.post(f"/acuerdo/{self.id_habilidad(hab_b)}", data={"mi": str(self.id_habilidad(hab_a))})
+        acuerdo_id = self.consulta("SELECT MAX(id) AS m FROM acuerdos")[0]["m"]
+        b.post(f"/acuerdo/{acuerdo_id}/responder", data={"accion": "aceptado"})
+        return acuerdo_id
+
+    def calificar(self, c, acuerdo_id, puntuacion, comentario=""):
+        return c.post(f"/calificar/{acuerdo_id}",
+                      data={"puntuacion": str(puntuacion), "comentario": comentario},
+                      follow_redirects=True)
+
+    def test_calificar_acuerdo_aceptado(self):
+        """CP-35 | Calificar al otro usuario después de un acuerdo aceptado | La calificación se guarda"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        r = self.calificar(ana, ac, 5, "Excelente trabajo")
+        self.assertIn("Gracias por tu calificación", texto(r))
+        fila = self.consulta("SELECT * FROM calificaciones")[0]
+        self.assertEqual((fila["puntuacion"], fila["comentario"]), (5, "Excelente trabajo"))
+
+    def test_no_calificar_propuesta_pendiente(self):
+        """CP-36 | Calificar un acuerdo que todavía no fue aceptado | No se permite"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        self.agregar(ana, "ofrezco", "Programación", "Clases de Python", 50000)
+        self.agregar(beto, "ofrezco", "Diseño", "Logo y branding", 40000)
+        ana.post(f"/acuerdo/{self.id_habilidad('Logo y branding')}", data={"mi": str(self.id_habilidad('Clases de Python'))})
+        r = self.calificar(ana, 1, 5)
+        self.assertIn("no está disponible", texto(r))
+        self.assertEqual(len(self.consulta("SELECT * FROM calificaciones")), 0)
+
+    def test_no_calificar_dos_veces(self):
+        """CP-37 | Calificar dos veces el mismo intercambio | La segunda calificación se rechaza"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        self.calificar(ana, ac, 5)
+        r = self.calificar(ana, ac, 1)
+        self.assertIn("Ya calificaste", texto(r))
+        self.assertEqual(len(self.consulta("SELECT * FROM calificaciones")), 1)
+
+    def test_ambos_pueden_calificarse(self):
+        """CP-38 | Cada participante califica al otro en el mismo intercambio | Se guardan dos calificaciones, una por persona"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        self.calificar(ana, ac, 5)
+        self.calificar(beto, ac, 4)
+        self.assertEqual(len(self.consulta("SELECT * FROM calificaciones")), 2)
+
+    def test_tercero_no_califica(self):
+        """CP-39 | Un usuario ajeno al intercambio intenta calificarlo | No se permite"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        caro = self.usuario("Caro", "caro@a.com")
+        self.assertIn("no está disponible", texto(self.calificar(caro, ac, 5)))
+        self.assertEqual(len(self.consulta("SELECT * FROM calificaciones")), 0)
+
+    def test_puntuacion_invalida(self):
+        """CP-40 | Enviar una puntuación fuera de 1 a 5 o un texto | Se rechaza y no se guarda"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        for malo in ("0", "6", "-1", "abc", ""):
+            self.assertIn("Revisa la puntuación", texto(self.calificar(ana, ac, malo)), malo)
+        self.assertEqual(len(self.consulta("SELECT * FROM calificaciones")), 0)
+
+    def test_comentario_largo(self):
+        """CP-41 | Enviar un comentario de más de 300 caracteres | Se rechaza y no se guarda"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        self.assertIn("Revisa la puntuación", texto(self.calificar(ana, ac, 5, "x" * 301)))
+        self.assertEqual(len(self.consulta("SELECT * FROM calificaciones")), 0)
+
+    def test_promedio_de_reputacion(self):
+        """CP-42 | Un usuario recibe dos calificaciones (5 y 4) | Su promedio es 4.5 y se ve en Coincidencias y en su perfil"""
+        ana, beto, caro = (self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com"),
+                           self.usuario("Caro", "caro@a.com"))
+        ac1 = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        ac2 = self.aceptado(caro, beto, "Clases de Java", 30000, "Afiches", 20000)
+        self.calificar(ana, ac1, 5)
+        self.calificar(caro, ac2, 4)
+        conn = sqlite3.connect(self.ruta); conn.row_factory = sqlite3.Row
+        self.assertEqual(skillmatch.reputaciones(conn)[2], (4.5, 2))
+        conn.close()
+        self.assertIn("4.5 (2 calificaciones)", texto(beto.get("/perfil")))
+        dani = self.usuario("Dani", "dani@a.com")
+        self.agregar(dani, "busco", "Diseño", "Logo")
+        self.assertIn("4.5 (2)", texto(dani.get("/matches")))
+
+    def test_calificacion_recibida_visible(self):
+        """CP-43 | El usuario calificado revisa su sección de calificaciones | Ve la puntuación y el comentario recibido"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        self.calificar(ana, ac, 5, "Muy puntual")
+        pagina = texto(beto.get("/calificaciones"))
+        self.assertIn("Muy puntual", pagina)
+        self.assertIn("★★★★★", pagina)
+
+    def test_comentario_escapado(self):
+        """CP-44 | Enviar un comentario con código <script> | Se muestra como texto, no se ejecuta"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        self.calificar(ana, ac, 3, "<script>alert(1)</script>")
+        pagina = texto(beto.get("/calificaciones"))
+        self.assertNotIn("<script>alert(1)</script>", pagina)
+        self.assertIn("&lt;script&gt;", pagina)
+
+    def test_pendientes_por_calificar(self):
+        """CP-45 | Un acuerdo aceptado sin calificar | Aparece en 'Intercambios por calificar' hasta que se califica"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        ac = self.aceptado(ana, beto, "Clases de Python", 50000, "Logo y branding", 40000)
+        self.assertIn(f"/calificar/{ac}", texto(ana.get("/calificaciones")))
+        self.calificar(ana, ac, 5)
+        self.assertNotIn(f"/calificar/{ac}", texto(ana.get("/calificaciones")))
+
+
 class PruebasCSRF(BaseTest):
     CSRF = True
 

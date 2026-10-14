@@ -96,3 +96,6 @@ th { background: var(--azul-claro); color: var(--azul); }
   padding: 9px 16px; border-radius: 6px; font-weight: 600;
 }
 .boton-enlace.secundario { background: #fff; color: var(--azul); border: 1px solid var(--azul); }
+
+.rep { color: var(--ambar); font-weight: 600; font-size: .95rem; margin-left: 4px; }
+textarea { max-width: 480px; }

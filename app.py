@@ -109,7 +109,36 @@ def init_db():
                 FOREIGN KEY (receptor_id) REFERENCES usuarios (id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS calificaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                acuerdo_id INTEGER NOT NULL,
+                calificador_id INTEGER NOT NULL,
+                calificado_id INTEGER NOT NULL,
+                puntuacion INTEGER NOT NULL CHECK (puntuacion BETWEEN 1 AND 5),
+                comentario TEXT NOT NULL DEFAULT '',
+                UNIQUE (acuerdo_id, calificador_id),
+                FOREIGN KEY (acuerdo_id) REFERENCES acuerdos (id),
+                FOREIGN KEY (calificador_id) REFERENCES usuarios (id),
+                FOREIGN KEY (calificado_id) REFERENCES usuarios (id)
+            )
+        """)
     conn.close()
+
+
+def reputaciones(conn):
+    """Promedio y cantidad de calificaciones por usuario: {usuario_id: (promedio, cantidad)}."""
+    filas = conn.execute(
+        "SELECT calificado_id, AVG(puntuacion) AS prom, COUNT(*) AS n "
+        "FROM calificaciones GROUP BY calificado_id"
+    ).fetchall()
+    return {f["calificado_id"]: (round(f["prom"], 1), f["n"]) for f in filas}
+
+
+@app.template_filter("estrellas")
+def estrellas(valor):
+    n = max(0, min(5, int(round(valor))))
+    return "★" * n + "☆" * (5 - n)
 
 
 def login_requerido(vista):
@@ -224,11 +253,12 @@ def perfil():
     filas = conn.execute(
         "SELECT * FROM habilidades WHERE usuario_id = ? ORDER BY id", (usuario_id,)
     ).fetchall()
+    rep = reputaciones(conn).get(usuario_id)
     conn.close()
     ofrezco = [f for f in filas if f["tipo"] == "ofrezco"]
     busco = [f for f in filas if f["tipo"] == "busco"]
     return render_template("perfil.html", ofrezco=ofrezco, busco=busco,
-                           categorias=CATEGORIAS)
+                           categorias=CATEGORIAS, rep=rep)
 
 
 @app.route("/habilidad/<int:habilidad_id>/eliminar", methods=["POST"])
@@ -264,6 +294,7 @@ def matches():
     buscan = conn.execute(
         "SELECT * FROM habilidades WHERE usuario_id != ? AND tipo = 'busco'", (yo,)
     ).fetchall()
+    reps = reputaciones(conn)
     conn.close()
 
     mis_categorias = {h["categoria"] for h in mis_ofrezco}
@@ -285,6 +316,7 @@ def matches():
                 "kw": comunes,
                 "mutuo": bool(mutuo_info),
                 "mutuo_info": mutuo_info,
+                "rep": reps.get(o["usuario_id"]),
             })
     resultados.sort(key=lambda m: (m["mutuo"], m["score"]), reverse=True)
     return render_template("matches.html", matches=resultados,
@@ -342,12 +374,13 @@ def acuerdo(su_id):
         flash("Propuesta enviada.")
         return redirect(url_for("acuerdos"))
 
+    rep_su = reputaciones(conn).get(su["usuario_id"])
     conn.close()
     resultado = None
     if mi is not None:
         _, resultado = calcular_diferencia(mi["valor"], su["valor"])
     return render_template("acuerdo.html", su=su, mis_ofrezco=mis_ofrezco,
-                           mi=mi, resultado=resultado)
+                           mi=mi, resultado=resultado, rep_su=rep_su)
 
 
 @app.route("/acuerdos")
@@ -362,6 +395,8 @@ def acuerdos():
         "JOIN usuarios ur ON ur.id = a.receptor_id "
         "WHERE a.proponente_id = ? OR a.receptor_id = ? ORDER BY a.id DESC", (yo, yo)
     ).fetchall()
+    calificados = {r["acuerdo_id"] for r in conn.execute(
+        "SELECT acuerdo_id FROM calificaciones WHERE calificador_id = ?", (yo,))}
     conn.close()
 
     lista = []
@@ -380,6 +415,7 @@ def acuerdos():
             "id": a["id"], "estado": a["estado"], "soy_proponente": soy_proponente,
             "otro_nombre": otro, "doy_nombre": doy_n, "doy_valor": doy_v,
             "recibo_nombre": rec_n, "recibo_valor": rec_v, "resultado": texto,
+            "ya_califique": a["id"] in calificados,
         })
     return render_template("acuerdos.html", acuerdos=lista)
 
@@ -412,7 +448,97 @@ def certificacion():
 @app.route("/calificaciones")
 @login_requerido
 def calificaciones():
-    return render_template("calificaciones.html")
+    yo = session["usuario_id"]
+    conn = get_db()
+    pendientes = conn.execute(
+        "SELECT a.id, "
+        "CASE WHEN a.proponente_id = ? THEN ur.nombre ELSE up.nombre END AS otro_nombre, "
+        "CASE WHEN a.proponente_id = ? THEN a.nombre_rec ELSE a.nombre_prop END AS recibo_nombre "
+        "FROM acuerdos a "
+        "JOIN usuarios up ON up.id = a.proponente_id "
+        "JOIN usuarios ur ON ur.id = a.receptor_id "
+        "WHERE a.estado = 'aceptado' AND (a.proponente_id = ? OR a.receptor_id = ?) "
+        "AND NOT EXISTS (SELECT 1 FROM calificaciones c "
+        "WHERE c.acuerdo_id = a.id AND c.calificador_id = ?) ORDER BY a.id DESC",
+        (yo, yo, yo, yo, yo),
+    ).fetchall()
+    recibidas = conn.execute(
+        "SELECT c.*, u.nombre AS de_nombre FROM calificaciones c "
+        "JOIN usuarios u ON u.id = c.calificador_id "
+        "WHERE c.calificado_id = ? ORDER BY c.id DESC", (yo,)
+    ).fetchall()
+    hechas = conn.execute(
+        "SELECT c.*, u.nombre AS para_nombre FROM calificaciones c "
+        "JOIN usuarios u ON u.id = c.calificado_id "
+        "WHERE c.calificador_id = ? ORDER BY c.id DESC", (yo,)
+    ).fetchall()
+    rep = reputaciones(conn).get(yo)
+    conn.close()
+    return render_template("calificaciones.html", pendientes=pendientes,
+                           recibidas=recibidas, hechas=hechas, rep=rep)
+
+
+@app.route("/calificar/<int:acuerdo_id>", methods=["GET", "POST"])
+@login_requerido
+def calificar(acuerdo_id):
+    yo = session["usuario_id"]
+    conn = get_db()
+    a = conn.execute(
+        "SELECT a.*, up.nombre AS nombre_proponente, ur.nombre AS nombre_receptor "
+        "FROM acuerdos a "
+        "JOIN usuarios up ON up.id = a.proponente_id "
+        "JOIN usuarios ur ON ur.id = a.receptor_id "
+        "WHERE a.id = ? AND a.estado = 'aceptado' "
+        "AND (a.proponente_id = ? OR a.receptor_id = ?)", (acuerdo_id, yo, yo)
+    ).fetchone()
+    if a is None:
+        conn.close()
+        flash("Ese intercambio no está disponible para calificar.")
+        return redirect(url_for("calificaciones"))
+
+    ya = conn.execute(
+        "SELECT 1 FROM calificaciones WHERE acuerdo_id = ? AND calificador_id = ?",
+        (acuerdo_id, yo),
+    ).fetchone()
+    if ya:
+        conn.close()
+        flash("Ya calificaste este intercambio.")
+        return redirect(url_for("calificaciones"))
+
+    soy_proponente = a["proponente_id"] == yo
+    otro_id = a["receptor_id"] if soy_proponente else a["proponente_id"]
+    otro_nombre = a["nombre_receptor"] if soy_proponente else a["nombre_proponente"]
+    recibo = a["nombre_rec"] if soy_proponente else a["nombre_prop"]
+
+    if request.method == "POST":
+        try:
+            puntuacion = int(request.form.get("puntuacion", ""))
+        except ValueError:
+            puntuacion = 0
+        comentario = request.form.get("comentario", "").strip()
+        if not 1 <= puntuacion <= 5 or len(comentario) > 300:
+            conn.close()
+            flash("Revisa la puntuación (de 1 a 5) y el comentario (máximo 300 caracteres).")
+            return render_template("calificar.html", acuerdo_id=acuerdo_id,
+                                   otro_nombre=otro_nombre, recibo=recibo)
+        try:
+            with conn:
+                conn.execute(
+                    "INSERT INTO calificaciones (acuerdo_id, calificador_id, calificado_id, "
+                    "puntuacion, comentario) VALUES (?, ?, ?, ?, ?)",
+                    (acuerdo_id, yo, otro_id, puntuacion, comentario),
+                )
+        except sqlite3.IntegrityError:
+            flash("Ya calificaste este intercambio.")
+        else:
+            flash("Gracias por tu calificación.")
+        finally:
+            conn.close()
+        return redirect(url_for("calificaciones"))
+
+    conn.close()
+    return render_template("calificar.html", acuerdo_id=acuerdo_id,
+                           otro_nombre=otro_nombre, recibo=recibo)
 
 
 if __name__ == "__main__":

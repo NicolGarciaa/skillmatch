@@ -35,6 +35,54 @@ DEMO = [
 ]
 
 
+# Intercambios ya realizados entre usuarios demo, con sus calificaciones:
+# (proponente, receptor, habilidad_prop, valor_prop, habilidad_rec, valor_rec,
+#  (puntuación del proponente al receptor, comentario), (del receptor al proponente, comentario))
+HISTORIAL = [
+    ("sofia@demo.com", "andres@demo.com", "Publicidad en redes sociales", 30000,
+     "Clases de inglés", 25000,
+     (5, "Muy puntual y clara explicando."), (5, "Excelente campaña, la recomiendo.")),
+    ("mateo@demo.com", "andres@demo.com", "Logo y branding", 40000,
+     "Clases de inglés", 25000,
+     (4, "Buen intercambio."), (5, "Diseño impecable y rápido.")),
+    ("mateo@demo.com", "sofia@demo.com", "Logo y branding", 40000,
+     "Publicidad en redes sociales", 30000,
+     (5, "Muy profesional."), (4, "Buen trabajo, entregado a tiempo.")),
+]
+
+
+def cargar_historial(conn):
+    """Crea intercambios aceptados con calificaciones de ejemplo (sin duplicarlos)."""
+    ids = {f["correo"]: f["id"] for f in conn.execute("SELECT id, correo FROM usuarios")}
+    nuevos = 0
+    for prop, rec, hp, vp, hr, vr, cal_prop, cal_rec in HISTORIAL:
+        if prop not in ids or rec not in ids:
+            continue
+        existe = conn.execute(
+            "SELECT 1 FROM acuerdos WHERE proponente_id = ? AND receptor_id = ? "
+            "AND nombre_prop = ? AND nombre_rec = ? AND estado = 'aceptado'",
+            (ids[prop], ids[rec], hp, hr),
+        ).fetchone()
+        if existe:
+            continue
+        with conn:
+            cur = conn.execute(
+                "INSERT INTO acuerdos (proponente_id, receptor_id, nombre_prop, valor_prop, "
+                "nombre_rec, valor_rec, estado) VALUES (?, ?, ?, ?, ?, ?, 'aceptado')",
+                (ids[prop], ids[rec], hp, vp, hr, vr),
+            )
+            for calificador, calificado, (punt, com) in (
+                (ids[prop], ids[rec], cal_prop), (ids[rec], ids[prop], cal_rec)
+            ):
+                conn.execute(
+                    "INSERT INTO calificaciones (acuerdo_id, calificador_id, calificado_id, "
+                    "puntuacion, comentario) VALUES (?, ?, ?, ?, ?)",
+                    (cur.lastrowid, calificador, calificado, punt, com),
+                )
+        nuevos += 1
+    return nuevos
+
+
 def main():
     skillmatch.init_db()
     conn = skillmatch.get_db()
@@ -56,7 +104,9 @@ def main():
                     (cur.lastrowid, tipo, categoria, hab, valor),
                 )
         creados += 1
+    historial = cargar_historial(conn)
     conn.close()
+    print(f"Intercambios con calificaciones de ejemplo creados: {historial}.")
     print(f"Usuarios demo creados: {creados} (los que ya existían se omitieron).")
     print(f"Correos: {', '.join(c for _, c, _ in DEMO)}  |  Contraseña: {PASSWORD}")
 

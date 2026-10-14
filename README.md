@@ -16,13 +16,14 @@ MVP funcional (en desarrollo).
 - **Perfil con habilidades:** cada usuario registra las habilidades que ofrece y las que busca, con categoría y valor aproximado en pesos.
 - **Coincidencias (matching):** muestra quién ofrece algo de la misma categoría que lo que el usuario busca. Calcula una afinidad según las palabras en común y marca los **matches mutuos** (cuando ambos ofrecen lo que el otro busca).
 - **Acuerdos económicos:** el usuario elige qué ofrece a cambio, el sistema calcula la diferencia de valor y se envía una propuesta. Quien la recibe puede aceptarla o rechazarla.
-- **Certificación y calificaciones:** pantallas de diseño (prototipo visual) para las siguientes fases.
+- **Calificaciones y comentarios:** tras un acuerdo aceptado, cada persona puede calificar a la otra (1 a 5 estrellas y un comentario, una vez por intercambio). El promedio se muestra en el perfil, en las coincidencias y al proponer un acuerdo.
+- **Certificación:** pantalla de diseño (prototipo visual) para la siguiente fase.
 
 ### Fuera del alcance de esta fase
 
 - Pagos con dinero real.
 - Validaciones legales o notariales externas.
-- Certificación y calificaciones con lógica funcional (solo existen como diseño de pantalla).
+- Certificación con lógica funcional (solo existe como diseño de pantalla).
 - Modelo de Machine Learning para el matching (por ahora se usan reglas simples por categoría y palabras clave).
 
 ## Tecnologías
@@ -66,7 +67,7 @@ La base de datos (`instance/skillmatch.db`) se crea automáticamente la primera 
 
 ## Pruebas
 
-El proyecto incluye pruebas automáticas (34 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
+El proyecto incluye pruebas automáticas (45 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
 
 ```
 python -m unittest tests.test_skillmatch -v
@@ -74,7 +75,7 @@ python -m unittest tests.test_skillmatch -v
 
 ## Datos de demostración
 
-Para cargar usuarios y habilidades de ejemplo (contraseña de todos: `demo1234`):
+Para cargar usuarios, habilidades e intercambios con calificaciones de ejemplo (contraseña de todos: `demo1234`):
 
 ```
 python datos_demo.py
@@ -98,6 +99,7 @@ skillmatch/
     ├── matches.html
     ├── acuerdo.html
     ├── acuerdos.html
+    ├── calificar.html
     ├── certificacion.html
     └── calificaciones.html
 ```
