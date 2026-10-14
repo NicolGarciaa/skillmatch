@@ -360,7 +360,7 @@ def responder_acuerdo(acuerdo_id):
             (accion, acuerdo_id, session["usuario_id"]),
         )
     conn.close()
-    flash(f"Propuesta {accion}." if cur.rowcount else "No se pudo actualizar esa propuesta.")
+    flash(f"Propuesta {'aceptada' if accion == 'aceptado' else 'rechazada'}." if cur.rowcount else "No se pudo actualizar esa propuesta.")
     return redirect(url_for("acuerdos"))
 
 

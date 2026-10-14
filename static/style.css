@@ -1,0 +1,98 @@
+:root {
+  --azul: #1f4e79;
+  --azul-claro: #e8f0f8;
+  --texto: #1c2b36;
+  --gris: #5b6770;
+  --borde: #d5dde5;
+  --fondo: #f6f8fa;
+  --verde: #1e7e4a;
+  --rojo: #b3261e;
+  --ambar: #8a5a00;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--fondo);
+  color: var(--texto);
+  line-height: 1.5;
+}
+
+.contenedor { max-width: 860px; margin: 0 auto; padding: 0 20px; }
+
+header { background: var(--azul); color: #fff; }
+header .contenedor {
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 8px 24px; padding-top: 14px; padding-bottom: 14px;
+}
+.marca { color: #fff; font-size: 1.4rem; font-weight: 700; text-decoration: none; }
+.menu { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.menu a { color: #dbe8f4; text-decoration: none; font-size: .95rem; }
+.menu a:hover { color: #fff; text-decoration: underline; }
+
+main { padding-top: 24px; padding-bottom: 48px; }
+h2 { color: var(--azul); margin: 8px 0 12px; }
+h3 { color: var(--azul); margin: 24px 0 8px; }
+a { color: var(--azul); }
+
+.mensajes { margin-bottom: 16px; }
+.mensaje {
+  background: var(--azul-claro); border-left: 4px solid var(--azul);
+  padding: 10px 14px; border-radius: 6px; margin-bottom: 8px; font-weight: 600;
+}
+
+form p { margin: 12px 0; }
+label { display: block; font-weight: 600; }
+input, select, textarea {
+  display: block; width: 100%; max-width: 380px; margin-top: 4px;
+  padding: 8px 10px; font: inherit; font-weight: 400; border: 1px solid var(--borde);
+  border-radius: 6px; background: #fff;
+}
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--azul); outline-offset: 1px; }
+
+button {
+  background: var(--azul); color: #fff; border: 0; border-radius: 6px;
+  padding: 9px 16px; font: inherit; font-weight: 600; cursor: pointer;
+}
+button:hover { filter: brightness(1.12); }
+button[disabled] { opacity: .5; cursor: not-allowed; filter: none; }
+button[value="rechazado"], form[action$="/eliminar"] button { background: var(--rojo); }
+button[value="aceptado"] { background: var(--verde); }
+li button { padding: 4px 10px; font-size: .85rem; margin-left: 6px; }
+
+main ul { list-style: none; padding: 0; margin: 12px 0; }
+main li {
+  background: #fff; border: 1px solid var(--borde); border-radius: 10px;
+  padding: 12px 16px; margin-bottom: 10px;
+}
+main li p { margin: 4px 0; }
+
+.badge {
+  display: inline-block; background: var(--verde); color: #fff; font-size: .75rem;
+  font-weight: 700; padding: 2px 8px; border-radius: 999px; margin-left: 6px;
+}
+.estado {
+  display: inline-block; font-size: .8rem; font-weight: 700; padding: 2px 10px;
+  border-radius: 999px; text-transform: capitalize;
+}
+.estado-propuesto { background: #fff3d6; color: var(--ambar); }
+.estado-aceptado { background: #dff3e7; color: var(--verde); }
+.estado-rechazado { background: #fbe4e2; color: var(--rojo); }
+
+table { border-collapse: collapse; background: #fff; width: 100%; margin: 12px 0; }
+th, td { border: 1px solid var(--borde); padding: 8px 12px; text-align: left; }
+th { background: var(--azul-claro); color: var(--azul); }
+
+.hero {
+  background: #fff; border: 1px solid var(--borde); border-radius: 12px;
+  padding: 28px; margin-bottom: 20px;
+}
+.hero h2 { font-size: 1.6rem; margin-top: 0; }
+.acciones { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.boton-enlace {
+  display: inline-block; background: var(--azul); color: #fff; text-decoration: none;
+  padding: 9px 16px; border-radius: 6px; font-weight: 600;
+}
+.boton-enlace.secundario { background: #fff; color: var(--azul); border: 1px solid var(--azul); }

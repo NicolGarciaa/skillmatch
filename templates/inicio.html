@@ -1,4 +1,16 @@
 {% extends "base.html" %}
 {% block contenido %}
-<p>Plataforma de intercambio de habilidades.</p>
+<div class="hero">
+  <h2>Conectando talentos, impulsando proyectos</h2>
+  <p>SkillMatch es una plataforma de intercambio de habilidades. Publica lo que ofreces y lo que buscas, encuentra coincidencias y cierra acuerdos justos cuando las habilidades no tienen el mismo valor.</p>
+  <div class="acciones">
+    {% if session.get("usuario_id") %}
+      <a class="boton-enlace" href="/matches">Ver coincidencias</a>
+      <a class="boton-enlace secundario" href="/perfil">Mi perfil</a>
+    {% else %}
+      <a class="boton-enlace" href="/registro">Crear cuenta</a>
+      <a class="boton-enlace secundario" href="/login">Iniciar sesión</a>
+    {% endif %}
+  </div>
+</div>
 {% endblock %}

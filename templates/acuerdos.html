@@ -9,7 +9,7 @@
     <li>
       <p>
         {% if a.soy_proponente %}Propuesta enviada a{% else %}Propuesta recibida de{% endif %}
-        <strong>{{ a.otro_nombre }}</strong> — Estado: <strong>{{ a.estado }}</strong>
+        <strong>{{ a.otro_nombre }}</strong> — <span class="estado estado-{{ a.estado }}">{{ a.estado }}</span>
       </p>
       <p>Tú das: {{ a.doy_nombre }} (${{ a.doy_valor }}) · Tú recibes: {{ a.recibo_nombre }} (${{ a.recibo_valor }})</p>
       <p>{{ a.resultado }}</p>
