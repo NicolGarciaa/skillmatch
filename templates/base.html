@@ -6,9 +6,18 @@
 </head>
 <body>
   <h1>SkillMatch</h1>
-  <nav><a href="/">Inicio</a> | <a href="/registro">Registro</a></nav>
+  <nav>
+    <a href="/">Inicio</a> |
+    {% if session.get("usuario_id") %}
+      <a href="/perfil">Mi perfil</a> |
+      <a href="/logout">Cerrar sesión ({{ session["nombre"] }})</a>
+    {% else %}
+      <a href="/registro">Registro</a> |
+      <a href="/login">Iniciar sesión</a>
+    {% endif %}
+  </nav>
   {% for mensaje in get_flashed_messages() %}
-    <p>{{ mensaje }}</p>
+    <p><strong>{{ mensaje }}</strong></p>
   {% endfor %}
   {% block contenido %}{% endblock %}
 </body>

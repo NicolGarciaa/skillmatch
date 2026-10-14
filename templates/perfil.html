@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block contenido %}
+<h2>Mi perfil</h2>
+<p>Nombre: {{ session["nombre"] }}</p>
+
+<h3>Agregar habilidad</h3>
+<form method="post">
+  <p>
+    <label>Tipo:
+      <select name="tipo">
+        <option value="ofrezco">Ofrezco</option>
+        <option value="busco">Busco</option>
+      </select>
+    </label>
+  </p>
+  <p>
+    <label>Categoría:
+      <select name="categoria">
+        {% for c in categorias %}
+          <option value="{{ c }}">{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </p>
+  <p><label>Habilidad: <input type="text" name="nombre" placeholder="Ej: Clases de Python"></label></p>
+  <p><label>Valor aproximado (COP): <input type="number" name="valor" min="0" value="0"></label></p>
+  <button type="submit">Agregar</button>
+</form>
+
+<h3>Habilidades que ofrezco</h3>
+{% if ofrezco %}
+<ul>
+  {% for h in ofrezco %}
+    <li>
+      [{{ h["categoria"] }}] {{ h["nombre"] }} — ${{ h["valor"] }}
+      <form method="post" action="/habilidad/{{ h['id'] }}/eliminar" style="display:inline">
+        <button type="submit">Eliminar</button>
+      </form>
+    </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>Aún no has agregado habilidades que ofreces.</p>
+{% endif %}
+
+<h3>Habilidades que busco</h3>
+{% if busco %}
+<ul>
+  {% for h in busco %}
+    <li>
+      [{{ h["categoria"] }}] {{ h["nombre"] }} — ${{ h["valor"] }}
+      <form method="post" action="/habilidad/{{ h['id'] }}/eliminar" style="display:inline">
+        <button type="submit">Eliminar</button>
+      </form>
+    </li>
+  {% endfor %}
+</ul>
+{% else %}
+<p>Aún no has agregado habilidades que buscas.</p>
+{% endif %}
+{% endblock %}
