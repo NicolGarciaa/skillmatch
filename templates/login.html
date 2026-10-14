@@ -2,6 +2,7 @@
 {% block contenido %}
 <h2>Iniciar sesión</h2>
 <form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <p><label>Correo: <input type="email" name="correo"></label></p>
   <p><label>Contraseña: <input type="password" name="password"></label></p>
   <button type="submit">Entrar</button>

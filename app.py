@@ -1,18 +1,20 @@
 import os
 import re
+import secrets
 import sqlite3
 import unicodedata
 from functools import wraps
 from flask import (Flask, render_template, request, redirect,
-                   url_for, flash, session)
+                   url_for, flash, session, abort)
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = "cambia-esta-clave"
+app.secret_key = os.environ.get("SKILLMATCH_SECRET", "cambia-esta-clave")
+app.config.setdefault("CSRF", True)
 
 # La base de datos queda en la carpeta "instance", que el .gitignore de Python ya excluye
 os.makedirs(app.instance_path, exist_ok=True)
-DB = os.path.join(app.instance_path, "skillmatch.db")
+app.config["DB"] = os.path.join(app.instance_path, "skillmatch.db")
 
 CATEGORIAS = ["Programación", "Diseño", "Idiomas", "Música",
               "Marketing", "Matemáticas", "Otro"]
@@ -40,8 +42,32 @@ def calcular_diferencia(valor_doy, valor_recibo):
     return dif, f"Lo que recibes vale ${-dif} más. Tú compensas con ${-dif}."
 
 
+def token_csrf():
+    if "_csrf" not in session:
+        session["_csrf"] = secrets.token_hex(16)
+    return session["_csrf"]
+
+
+app.jinja_env.globals["csrf_token"] = token_csrf
+
+
+@app.before_request
+def verificar_csrf():
+    """Rechaza cualquier POST que no traiga el token de seguridad de la sesión."""
+    if request.method == "POST" and app.config["CSRF"]:
+        enviado = request.form.get("_csrf", "")
+        esperado = session.get("_csrf", "")
+        if not enviado or not esperado or not secrets.compare_digest(enviado, esperado):
+            abort(400)
+
+
+@app.errorhandler(400)
+def solicitud_invalida(error):
+    return "Solicitud no válida (falta el token de seguridad). Vuelve atrás y recarga la página.", 400
+
+
 def get_db():
-    conn = sqlite3.connect(DB)
+    conn = sqlite3.connect(app.config["DB"])
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -111,6 +137,10 @@ def registro():
         if not nombre or not correo or len(password) < 6:
             flash("Completa todos los campos. La contraseña debe tener mínimo 6 caracteres.")
             return render_template("registro.html")
+        if (len(nombre) > 60 or len(correo) > 120 or len(password) > 128
+                or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", correo)):
+            flash("Revisa el nombre y el correo (el correo debe tener un formato válido).")
+            return render_template("registro.html")
 
         conn = get_db()
         try:
@@ -178,7 +208,7 @@ def perfil():
             valor = -1
 
         if (tipo not in ("ofrezco", "busco") or categoria not in CATEGORIAS
-                or not nombre or valor < 0):
+                or not nombre or len(nombre) > 80 or valor < 0 or valor > 100_000_000):
             flash("Revisa los datos de la habilidad.")
         else:
             with conn:
@@ -292,6 +322,15 @@ def acuerdo(su_id):
             conn.close()
             flash("Elige una de tus habilidades para proponer el acuerdo.")
             return redirect(url_for("acuerdo", su_id=su_id))
+        repetida = conn.execute(
+            "SELECT 1 FROM acuerdos WHERE proponente_id = ? AND receptor_id = ? "
+            "AND nombre_prop = ? AND nombre_rec = ? AND estado = 'propuesto'",
+            (yo, su["usuario_id"], mi["nombre"], su["nombre"]),
+        ).fetchone()
+        if repetida:
+            conn.close()
+            flash("Ya enviaste una propuesta igual que sigue pendiente.")
+            return redirect(url_for("acuerdos"))
         with conn:
             conn.execute(
                 "INSERT INTO acuerdos (proponente_id, receptor_id, nombre_prop, "

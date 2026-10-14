@@ -32,6 +32,7 @@
     </ul>
     <p><strong>{{ resultado }}</strong></p>
     <form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <input type="hidden" name="mi" value="{{ mi['id'] }}">
       <button type="submit">Enviar propuesta</button>
     </form>

@@ -64,12 +64,31 @@ MVP funcional (en desarrollo).
 
 La base de datos (`instance/skillmatch.db`) se crea automáticamente la primera vez que se ejecuta la aplicación.
 
+## Pruebas
+
+El proyecto incluye pruebas automáticas (34 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
+
+```
+python -m unittest tests.test_skillmatch -v
+```
+
+## Datos de demostración
+
+Para cargar usuarios y habilidades de ejemplo (contraseña de todos: `demo1234`):
+
+```
+python datos_demo.py
+```
+
 ## Estructura del proyecto
 
 ```
 skillmatch/
 ├── app.py            # Aplicación Flask: rutas, base de datos y lógica
+├── datos_demo.py     # Datos de ejemplo para la demostración
 ├── requirements.txt  # Dependencias de Python
+├── static/           # Estilos (style.css)
+├── tests/            # Pruebas automáticas
 └── templates/        # Páginas HTML
     ├── base.html
     ├── inicio.html

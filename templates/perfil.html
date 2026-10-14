@@ -5,6 +5,7 @@
 
 <h3>Agregar habilidad</h3>
 <form method="post">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
   <p>
     <label>Tipo:
       <select name="tipo">
@@ -34,6 +35,7 @@
     <li>
       [{{ h["categoria"] }}] {{ h["nombre"] }} — ${{ h["valor"] }}
       <form method="post" action="/habilidad/{{ h['id'] }}/eliminar" style="display:inline">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <button type="submit">Eliminar</button>
       </form>
     </li>
@@ -50,6 +52,7 @@
     <li>
       [{{ h["categoria"] }}] {{ h["nombre"] }} — ${{ h["valor"] }}
       <form method="post" action="/habilidad/{{ h['id'] }}/eliminar" style="display:inline">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <button type="submit">Eliminar</button>
       </form>
     </li>

@@ -15,6 +15,7 @@
       <p>{{ a.resultado }}</p>
       {% if not a.soy_proponente and a.estado == "propuesto" %}
         <form method="post" action="/acuerdo/{{ a.id }}/responder" style="display:inline">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
           <button type="submit" name="accion" value="aceptado">Aceptar</button>
           <button type="submit" name="accion" value="rechazado">Rechazar</button>
         </form>
