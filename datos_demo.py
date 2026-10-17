@@ -83,6 +83,50 @@ def cargar_historial(conn):
     return nuevos
 
 
+CERTIFICADOR = ("Certificador Demo", "certificador@demo.com")
+
+
+def cargar_certificaciones(conn):
+    """Crea la cuenta de certificador y deja una certificación aprobada y una pendiente."""
+    with conn:
+        try:
+            conn.execute(
+                "INSERT INTO usuarios (nombre, correo, password, rol) VALUES (?, ?, ?, 'certificador')",
+                (CERTIFICADOR[0], CERTIFICADOR[1], generate_password_hash(PASSWORD)),
+            )
+        except sqlite3.IntegrityError:
+            conn.execute("UPDATE usuarios SET rol = 'certificador' WHERE correo = ?", (CERTIFICADOR[1],))
+    ids = {f["correo"]: f["id"] for f in conn.execute("SELECT id, correo FROM usuarios")}
+    cert_id = ids[CERTIFICADOR[1]]
+    # (correo del dueño, habilidad, estado, evidencia, observación)
+    casos = [
+        ("mateo@demo.com", "Logo y branding", "aprobada",
+         "Portafolio con 15 marcas diseñadas y 4 años de experiencia.", "Portafolio verificado."),
+        ("andres@demo.com", "Clases de inglés", "pendiente",
+         "Certificado TOEFL (100 puntos) y 3 años dando clases particulares.", ""),
+    ]
+    nuevos = 0
+    for correo, hab, estado, evidencia, obs in casos:
+        fila = conn.execute(
+            "SELECT * FROM habilidades WHERE usuario_id = ? AND nombre = ? AND tipo = 'ofrezco'",
+            (ids.get(correo), hab),
+        ).fetchone()
+        if fila is None:
+            continue
+        if conn.execute("SELECT 1 FROM certificaciones WHERE habilidad_id = ?", (fila["id"],)).fetchone():
+            continue
+        with conn:
+            conn.execute(
+                "INSERT INTO certificaciones (habilidad_id, solicitante_id, certificador_id, "
+                "nombre_habilidad, categoria, evidencia, estado, observacion) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                (fila["id"], ids[correo], cert_id if estado != "pendiente" else None,
+                 fila["nombre"], fila["categoria"], evidencia, estado, obs),
+            )
+        nuevos += 1
+    return nuevos
+
+
 def main():
     skillmatch.init_db()
     conn = skillmatch.get_db()
@@ -105,7 +149,9 @@ def main():
                 )
         creados += 1
     historial = cargar_historial(conn)
+    certificaciones = cargar_certificaciones(conn)
     conn.close()
+    print(f"Certificador: {CERTIFICADOR[1]} (certificaciones de ejemplo creadas: {certificaciones}).")
     print(f"Intercambios con calificaciones de ejemplo creados: {historial}.")
     print(f"Usuarios demo creados: {creados} (los que ya existían se omitieron).")
     print(f"Correos: {', '.join(c for _, c, _ in DEMO)}  |  Contraseña: {PASSWORD}")

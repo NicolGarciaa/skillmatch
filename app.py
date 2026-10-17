@@ -66,6 +66,11 @@ def solicitud_invalida(error):
     return "Solicitud no válida (falta el token de seguridad). Vuelve atrás y recarga la página.", 400
 
 
+@app.errorhandler(403)
+def acceso_denegado(error):
+    return "Acceso denegado: esta acción es solo para certificadores.", 403
+
+
 def get_db():
     conn = sqlite3.connect(app.config["DB"])
     conn.row_factory = sqlite3.Row
@@ -80,7 +85,8 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 nombre TEXT NOT NULL,
                 correo TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL
+                password TEXT NOT NULL,
+                rol TEXT NOT NULL DEFAULT 'usuario'
             )
         """)
         conn.execute("""
@@ -123,6 +129,27 @@ def init_db():
                 FOREIGN KEY (calificado_id) REFERENCES usuarios (id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS certificaciones (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                habilidad_id INTEGER NOT NULL,
+                solicitante_id INTEGER NOT NULL,
+                certificador_id INTEGER,
+                nombre_habilidad TEXT NOT NULL,
+                categoria TEXT NOT NULL,
+                evidencia TEXT NOT NULL,
+                estado TEXT NOT NULL DEFAULT 'pendiente'
+                    CHECK (estado IN ('pendiente', 'aprobada', 'rechazada')),
+                observacion TEXT NOT NULL DEFAULT '',
+                FOREIGN KEY (habilidad_id) REFERENCES habilidades (id),
+                FOREIGN KEY (solicitante_id) REFERENCES usuarios (id),
+                FOREIGN KEY (certificador_id) REFERENCES usuarios (id)
+            )
+        """)
+        # Bases de datos creadas en semanas anteriores no tienen la columna "rol"
+        columnas = [f["name"] for f in conn.execute("PRAGMA table_info(usuarios)")]
+        if "rol" not in columnas:
+            conn.execute("ALTER TABLE usuarios ADD COLUMN rol TEXT NOT NULL DEFAULT 'usuario'")
     conn.close()
 
 
@@ -139,6 +166,12 @@ def reputaciones(conn):
 def estrellas(valor):
     n = max(0, min(5, int(round(valor))))
     return "★" * n + "☆" * (5 - n)
+
+
+def habilidades_certificadas(conn):
+    """Conjunto de ids de habilidades con una certificación aprobada."""
+    return {f["habilidad_id"] for f in conn.execute(
+        "SELECT habilidad_id FROM certificaciones WHERE estado = 'aprobada'")}
 
 
 def login_requerido(vista):
@@ -206,6 +239,7 @@ def login():
             session.clear()
             session["usuario_id"] = usuario["id"]
             session["nombre"] = usuario["nombre"]
+            session["rol"] = usuario["rol"]
             return redirect(url_for("perfil"))
 
         flash("Correo o contraseña incorrectos.")
@@ -254,11 +288,12 @@ def perfil():
         "SELECT * FROM habilidades WHERE usuario_id = ? ORDER BY id", (usuario_id,)
     ).fetchall()
     rep = reputaciones(conn).get(usuario_id)
+    certificadas = habilidades_certificadas(conn)
     conn.close()
     ofrezco = [f for f in filas if f["tipo"] == "ofrezco"]
     busco = [f for f in filas if f["tipo"] == "busco"]
     return render_template("perfil.html", ofrezco=ofrezco, busco=busco,
-                           categorias=CATEGORIAS, rep=rep)
+                           categorias=CATEGORIAS, rep=rep, certificadas=certificadas)
 
 
 @app.route("/habilidad/<int:habilidad_id>/eliminar", methods=["POST"])
@@ -266,6 +301,10 @@ def perfil():
 def eliminar_habilidad(habilidad_id):
     conn = get_db()
     with conn:
+        conn.execute(
+            "DELETE FROM certificaciones WHERE habilidad_id = ? AND solicitante_id = ? "
+            "AND estado = 'pendiente'", (habilidad_id, session["usuario_id"]),
+        )
         conn.execute(
             "DELETE FROM habilidades WHERE id = ? AND usuario_id = ?",
             (habilidad_id, session["usuario_id"]),
@@ -295,6 +334,7 @@ def matches():
         "SELECT * FROM habilidades WHERE usuario_id != ? AND tipo = 'busco'", (yo,)
     ).fetchall()
     reps = reputaciones(conn)
+    certificadas = habilidades_certificadas(conn)
     conn.close()
 
     mis_categorias = {h["categoria"] for h in mis_ofrezco}
@@ -317,8 +357,9 @@ def matches():
                 "mutuo": bool(mutuo_info),
                 "mutuo_info": mutuo_info,
                 "rep": reps.get(o["usuario_id"]),
+                "certificada": o["id"] in certificadas,
             })
-    resultados.sort(key=lambda m: (m["mutuo"], m["score"]), reverse=True)
+    resultados.sort(key=lambda m: (m["mutuo"], m["score"], m["certificada"]), reverse=True)
     return render_template("matches.html", matches=resultados,
                            tiene_busco=bool(mis_busco))
 
@@ -375,12 +416,14 @@ def acuerdo(su_id):
         return redirect(url_for("acuerdos"))
 
     rep_su = reputaciones(conn).get(su["usuario_id"])
+    su_certificada = su["id"] in habilidades_certificadas(conn)
     conn.close()
     resultado = None
     if mi is not None:
         _, resultado = calcular_diferencia(mi["valor"], su["valor"])
     return render_template("acuerdo.html", su=su, mis_ofrezco=mis_ofrezco,
-                           mi=mi, resultado=resultado, rep_su=rep_su)
+                           mi=mi, resultado=resultado, rep_su=rep_su,
+                           su_certificada=su_certificada)
 
 
 @app.route("/acuerdos")
@@ -442,7 +485,106 @@ def responder_acuerdo(acuerdo_id):
 @app.route("/certificacion")
 @login_requerido
 def certificacion():
-    return render_template("certificacion.html")
+    yo = session["usuario_id"]
+    conn = get_db()
+
+    if session.get("rol") == "certificador":
+        pendientes = conn.execute(
+            "SELECT c.*, u.nombre AS solicitante_nombre FROM certificaciones c "
+            "JOIN usuarios u ON u.id = c.solicitante_id "
+            "WHERE c.estado = 'pendiente' AND c.solicitante_id != ? ORDER BY c.id", (yo,)
+        ).fetchall()
+        resueltas = conn.execute(
+            "SELECT c.*, u.nombre AS solicitante_nombre FROM certificaciones c "
+            "JOIN usuarios u ON u.id = c.solicitante_id "
+            "WHERE c.certificador_id = ? ORDER BY c.id DESC", (yo,)
+        ).fetchall()
+        conn.close()
+        return render_template("certificacion.html", es_certificador=True,
+                               pendientes=pendientes, resueltas=resueltas)
+
+    habilidades = conn.execute(
+        "SELECT * FROM habilidades WHERE usuario_id = ? AND tipo = 'ofrezco' ORDER BY id", (yo,)
+    ).fetchall()
+    items = []
+    for h in habilidades:
+        ultima = conn.execute(
+            "SELECT c.*, u.nombre AS certificador_nombre FROM certificaciones c "
+            "LEFT JOIN usuarios u ON u.id = c.certificador_id "
+            "WHERE c.habilidad_id = ? ORDER BY c.id DESC LIMIT 1", (h["id"],)
+        ).fetchone()
+        items.append({"hab": h, "cert": ultima})
+    conn.close()
+    return render_template("certificacion.html", es_certificador=False, items=items)
+
+
+@app.route("/certificacion/solicitar/<int:habilidad_id>", methods=["POST"])
+@login_requerido
+def solicitar_certificacion(habilidad_id):
+    yo = session["usuario_id"]
+    conn = get_db()
+    h = conn.execute(
+        "SELECT * FROM habilidades WHERE id = ? AND usuario_id = ? AND tipo = 'ofrezco'",
+        (habilidad_id, yo),
+    ).fetchone()
+    if h is None:
+        conn.close()
+        flash("Esa habilidad no está disponible para certificar.")
+        return redirect(url_for("certificacion"))
+
+    evidencia = request.form.get("evidencia", "").strip()
+    if not 10 <= len(evidencia) <= 500:
+        conn.close()
+        flash("Describe tu evidencia en 10 a 500 caracteres (estudios, proyectos, enlaces).")
+        return redirect(url_for("certificacion"))
+
+    activa = conn.execute(
+        "SELECT 1 FROM certificaciones WHERE habilidad_id = ? "
+        "AND estado IN ('pendiente', 'aprobada')", (habilidad_id,)
+    ).fetchone()
+    if activa:
+        conn.close()
+        flash("Esa habilidad ya está certificada o en revisión.")
+        return redirect(url_for("certificacion"))
+
+    with conn:
+        conn.execute(
+            "INSERT INTO certificaciones (habilidad_id, solicitante_id, nombre_habilidad, "
+            "categoria, evidencia) VALUES (?, ?, ?, ?, ?)",
+            (habilidad_id, yo, h["nombre"], h["categoria"], evidencia),
+        )
+    conn.close()
+    flash("Solicitud enviada. Un certificador la revisará.")
+    return redirect(url_for("certificacion"))
+
+
+@app.route("/certificacion/<int:cert_id>/resolver", methods=["POST"])
+@login_requerido
+def resolver_certificacion(cert_id):
+    if session.get("rol") != "certificador":
+        abort(403)
+    accion = request.form.get("accion")
+    observacion = request.form.get("observacion", "").strip()
+    if accion not in ("aprobada", "rechazada") or len(observacion) > 300:
+        flash("Acción u observación no válida (máximo 300 caracteres).")
+        return redirect(url_for("certificacion"))
+    if accion == "rechazada" and len(observacion) < 5:
+        flash("Explica brevemente por qué se rechaza (mínimo 5 caracteres).")
+        return redirect(url_for("certificacion"))
+
+    conn = get_db()
+    with conn:
+        cur = conn.execute(
+            "UPDATE certificaciones SET estado = ?, certificador_id = ?, observacion = ? "
+            "WHERE id = ? AND estado = 'pendiente' AND solicitante_id != ?",
+            (accion, session["usuario_id"], observacion, cert_id, session["usuario_id"]),
+        )
+    conn.close()
+    if cur.rowcount:
+        flash(f"Solicitud {accion}.")
+    else:
+        flash("No se pudo resolver esa solicitud.")
+    return redirect(url_for("certificacion"))
 
 
 @app.route("/calificaciones")

@@ -13,7 +13,7 @@
     <li>
       <p>
         <strong>{{ m.otro_nombre }}</strong>{% if m.rep %} <span class="rep">{{ m.rep[0]|estrellas }} {{ m.rep[0] }} ({{ m.rep[1] }})</span>{% endif %} ofrece
-        [{{ m.su_hab["categoria"] }}] {{ m.su_hab["nombre"] }} — ${{ m.su_hab["valor"] }}
+        [{{ m.su_hab["categoria"] }}] {{ m.su_hab["nombre"] }} — ${{ m.su_hab["valor"] }}{% if m.certificada %} <span class="badge cert">Certificada</span>{% endif %}
         {% if m.mutuo %}<span class="badge">Match mutuo</span>{% endif %}
       </p>
       <p>

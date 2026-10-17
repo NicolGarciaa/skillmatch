@@ -99,3 +99,11 @@ th { background: var(--azul-claro); color: var(--azul); }
 
 .rep { color: var(--ambar); font-weight: 600; font-size: .95rem; margin-left: 4px; }
 textarea { max-width: 480px; }
+
+.badge.cert { background: var(--azul); }
+.estado { background: #eceff3; color: var(--gris); }
+.estado-pendiente { background: #fff3d6; color: var(--ambar); }
+.estado-aprobada { background: #dff3e7; color: var(--verde); }
+.estado-rechazada { background: #fbe4e2; color: var(--rojo); }
+button[value="aprobada"] { background: var(--verde); }
+button[value="rechazada"] { background: var(--rojo); }

@@ -17,13 +17,13 @@ MVP funcional (en desarrollo).
 - **Coincidencias (matching):** muestra quién ofrece algo de la misma categoría que lo que el usuario busca. Calcula una afinidad según las palabras en común y marca los **matches mutuos** (cuando ambos ofrecen lo que el otro busca).
 - **Acuerdos económicos:** el usuario elige qué ofrece a cambio, el sistema calcula la diferencia de valor y se envía una propuesta. Quien la recibe puede aceptarla o rechazarla.
 - **Calificaciones y comentarios:** tras un acuerdo aceptado, cada persona puede calificar a la otra (1 a 5 estrellas y un comentario, una vez por intercambio). El promedio se muestra en el perfil, en las coincidencias y al proponer un acuerdo.
-- **Certificación:** pantalla de diseño (prototipo visual) para la siguiente fase.
+- **Certificación de habilidades (versión simplificada):** el usuario solicita certificar una habilidad que ofrece, con una evidencia escrita; un usuario con rol *certificador* revisa la evidencia y la aprueba o la rechaza con una observación. Las habilidades aprobadas muestran la etiqueta **Certificada** en el perfil, las coincidencias y los acuerdos.
 
 ### Fuera del alcance de esta fase
 
 - Pagos con dinero real.
 - Validaciones legales o notariales externas.
-- Certificación con lógica funcional (solo existe como diseño de pantalla).
+- Verificación automática de documentos o títulos (la evidencia es texto que revisa un certificador).
 - Modelo de Machine Learning para el matching (por ahora se usan reglas simples por categoría y palabras clave).
 
 ## Tecnologías
@@ -67,7 +67,7 @@ La base de datos (`instance/skillmatch.db`) se crea automáticamente la primera 
 
 ## Pruebas
 
-El proyecto incluye pruebas automáticas (45 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
+El proyecto incluye pruebas automáticas (59 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
 
 ```
 python -m unittest tests.test_skillmatch -v
@@ -81,12 +81,23 @@ Para cargar usuarios, habilidades e intercambios con calificaciones de ejemplo (
 python datos_demo.py
 ```
 
+## Certificadores
+
+Los usuarios nuevos se registran con el rol normal. Para convertir a un usuario ya registrado en certificador (acción administrativa, desde la consola):
+
+```
+python asignar_certificador.py correo@ejemplo.com
+```
+
+La persona debe cerrar sesión y volver a entrar. Los datos de demostración incluyen la cuenta `certificador@demo.com` (contraseña `demo1234`).
+
 ## Estructura del proyecto
 
 ```
 skillmatch/
 ├── app.py            # Aplicación Flask: rutas, base de datos y lógica
 ├── datos_demo.py     # Datos de ejemplo para la demostración
+├── asignar_certificador.py  # Convierte un usuario registrado en certificador
 ├── requirements.txt  # Dependencias de Python
 ├── static/           # Estilos (style.css)
 ├── tests/            # Pruebas automáticas

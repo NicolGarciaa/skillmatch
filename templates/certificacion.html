@@ -1,11 +1,87 @@
 {% extends "base.html" %}
 {% block contenido %}
 <h2>Certificación de habilidades</h2>
-<p><em>Diseño de pantalla (prototipo visual). La validación real por certificadores se implementará en una fase posterior.</em></p>
-<table border="1" cellpadding="6">
-  <tr><th>Habilidad</th><th>Estado</th><th>Certificador</th><th>Acción</th></tr>
-  <tr><td>Clases de Python (ejemplo)</td><td>Certificada</td><td>Certificador A</td><td>—</td></tr>
-  <tr><td>Diseño de logos (ejemplo)</td><td>En revisión</td><td>Certificador B</td><td>—</td></tr>
-  <tr><td>Clases de inglés (ejemplo)</td><td>Sin certificar</td><td>—</td><td><button disabled>Solicitar certificación</button></td></tr>
-</table>
+
+{% if es_certificador %}
+  <p>Eres <strong>certificador</strong>: revisa la evidencia de cada solicitud y aprueba o rechaza la habilidad.</p>
+
+  <h3>Solicitudes pendientes</h3>
+  {% if pendientes %}
+  <ul>
+    {% for c in pendientes %}
+      <li>
+        <p><strong>{{ c["solicitante_nombre"] }}</strong> solicita certificar:
+           [{{ c["categoria"] }}] {{ c["nombre_habilidad"] }}</p>
+        <p>Evidencia: {{ c["evidencia"] }}</p>
+        <form method="post" action="/certificacion/{{ c['id'] }}/resolver">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <p><label>Observación (obligatoria si rechazas):
+            <textarea name="observacion" rows="2" maxlength="300"></textarea></label></p>
+          <button type="submit" name="accion" value="aprobada">Aprobar</button>
+          <button type="submit" name="accion" value="rechazada">Rechazar</button>
+        </form>
+      </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p>No hay solicitudes pendientes.</p>
+  {% endif %}
+
+  <h3>Solicitudes que resolviste</h3>
+  {% if resueltas %}
+  <ul>
+    {% for c in resueltas %}
+      <li>
+        <span class="estado estado-{{ c['estado'] }}">{{ c["estado"] }}</span>
+        {{ c["solicitante_nombre"] }} — {{ c["nombre_habilidad"] }}
+        {% if c["observacion"] %}<p>Observación: {{ c["observacion"] }}</p>{% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p>Aún no has resuelto solicitudes.</p>
+  {% endif %}
+
+{% else %}
+  <p>Una habilidad certificada genera más confianza. Solicita la validación de las habilidades que ofreces
+     y un certificador revisará tu evidencia.</p>
+
+  {% if items %}
+  <ul>
+    {% for it in items %}
+      {% set h = it["hab"] %}{% set c = it["cert"] %}
+      <li>
+        <p>[{{ h["categoria"] }}] <strong>{{ h["nombre"] }}</strong>
+          {% if c and c["estado"] == "aprobada" %}
+            <span class="estado estado-aprobada">Certificada</span>
+          {% elif c and c["estado"] == "pendiente" %}
+            <span class="estado estado-pendiente">En revisión</span>
+          {% elif c and c["estado"] == "rechazada" %}
+            <span class="estado estado-rechazada">Rechazada</span>
+          {% else %}
+            <span class="estado">Sin certificar</span>
+          {% endif %}
+        </p>
+        {% if c and c["estado"] == "aprobada" %}
+          <p>Certificada por {{ c["certificador_nombre"] }}.{% if c["observacion"] %} Observación: {{ c["observacion"] }}{% endif %}</p>
+        {% elif c and c["estado"] == "pendiente" %}
+          <p>Tu solicitud está esperando la revisión de un certificador.</p>
+        {% else %}
+          {% if c and c["estado"] == "rechazada" %}
+            <p>Observación del certificador: {{ c["observacion"] }}</p>
+          {% endif %}
+          <form method="post" action="/certificacion/solicitar/{{ h['id'] }}">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+            <p><label>Evidencia (estudios, proyectos, enlaces):
+              <textarea name="evidencia" rows="3" maxlength="500"></textarea></label></p>
+            <button type="submit">Solicitar certificación</button>
+          </form>
+        {% endif %}
+      </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+    <p>Aún no ofreces ninguna habilidad. Agrégala en <a href="/perfil">Mi perfil</a>.</p>
+  {% endif %}
+{% endif %}
 {% endblock %}

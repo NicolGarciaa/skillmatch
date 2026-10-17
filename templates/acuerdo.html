@@ -3,7 +3,7 @@
 <h2>Proponer acuerdo</h2>
 <p>
   Con <strong>{{ su["usuario_nombre"] }}</strong>{% if rep_su %} <span class="rep">{{ rep_su[0]|estrellas }} {{ rep_su[0] }} ({{ rep_su[1] }})</span>{% endif %}, que ofrece:
-  [{{ su["categoria"] }}] {{ su["nombre"] }} — ${{ su["valor"] }}
+  [{{ su["categoria"] }}] {{ su["nombre"] }} — ${{ su["valor"] }}{% if su_certificada %} <span class="badge cert">Certificada</span>{% endif %}
 </p>
 
 {% if not mis_ofrezco %}

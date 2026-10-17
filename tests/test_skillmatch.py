@@ -13,6 +13,7 @@ import tempfile
 import unittest
 
 import app as skillmatch
+import asignar_certificador
 
 
 def texto(respuesta):
@@ -422,6 +423,159 @@ class PruebasCalificaciones(BaseTest):
         self.assertIn(f"/calificar/{ac}", texto(ana.get("/calificaciones")))
         self.calificar(ana, ac, 5)
         self.assertNotIn(f"/calificar/{ac}", texto(ana.get("/calificaciones")))
+
+
+class PruebasCertificacion(BaseTest):
+    EVIDENCIA = "Curso universitario y tres proyectos publicados"
+
+    def certificador(self, nombre="Cert", correo="cert@a.com"):
+        c = self.cliente()
+        self.registrar(c, nombre, correo)
+        asignar_certificador.asignar(correo)
+        self.entrar(c, correo)
+        return c
+
+    def solicitar(self, c, hab_id, evidencia=None):
+        return c.post(f"/certificacion/solicitar/{hab_id}",
+                      data={"evidencia": self.EVIDENCIA if evidencia is None else evidencia},
+                      follow_redirects=True)
+
+    def resolver(self, c, cert_id, accion, observacion=""):
+        return c.post(f"/certificacion/{cert_id}/resolver",
+                      data={"accion": accion, "observacion": observacion}, follow_redirects=True)
+
+    def estado(self, cert_id=1):
+        return self.consulta("SELECT estado FROM certificaciones WHERE id = ?", (cert_id,))[0]["estado"]
+
+    def preparar(self):
+        ana = self.usuario("Ana", "ana@a.com")
+        self.agregar(ana, "ofrezco", "Programación", "Clases de Python", 50000)
+        return ana, self.id_habilidad("Clases de Python")
+
+    def test_solicitar_certificacion(self):
+        """CP-46 | Solicitar la certificación de una habilidad propia con evidencia | La solicitud queda 'pendiente'"""
+        ana, hid = self.preparar()
+        self.assertIn("Solicitud enviada", texto(self.solicitar(ana, hid)))
+        self.assertEqual(self.estado(), "pendiente")
+        self.assertIn("En revisión", texto(ana.get("/certificacion")))
+
+    def test_evidencia_corta(self):
+        """CP-47 | Solicitar la certificación con una evidencia demasiado corta | Se rechaza y no se crea la solicitud"""
+        ana, hid = self.preparar()
+        self.assertIn("evidencia", texto(self.solicitar(ana, hid, "corta")))
+        self.assertEqual(len(self.consulta("SELECT * FROM certificaciones")), 0)
+
+    def test_solo_habilidades_propias_que_ofrece(self):
+        """CP-48 | Solicitar certificar la habilidad de otro usuario o una que solo se busca | No se permite"""
+        ana, hid = self.preparar()
+        beto = self.usuario("Beto", "beto@a.com")
+        self.agregar(beto, "busco", "Diseño", "Logo")
+        self.assertIn("no está disponible", texto(self.solicitar(beto, hid)))
+        self.assertIn("no está disponible", texto(self.solicitar(beto, self.id_habilidad("Logo"))))
+        self.assertEqual(len(self.consulta("SELECT * FROM certificaciones")), 0)
+
+    def test_no_duplicar_solicitud(self):
+        """CP-49 | Solicitar dos veces la certificación de una habilidad ya en revisión | La segunda se rechaza"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        self.assertIn("ya está certificada o en revisión", texto(self.solicitar(ana, hid)))
+        self.assertEqual(len(self.consulta("SELECT * FROM certificaciones")), 1)
+
+    def test_usuario_normal_no_resuelve(self):
+        """CP-50 | Un usuario sin rol de certificador intenta aprobar una solicitud | Acceso denegado (403) y sigue 'pendiente'"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        beto = self.usuario("Beto", "beto@a.com")
+        self.assertEqual(beto.post("/certificacion/1/resolver", data={"accion": "aprobada"}).status_code, 403)
+        self.assertEqual(ana.post("/certificacion/1/resolver", data={"accion": "aprobada"}).status_code, 403)
+        self.assertEqual(self.estado(), "pendiente")
+
+    def test_aprobar_certificacion(self):
+        """CP-51 | El certificador aprueba una solicitud | La habilidad queda 'Certificada' y se ve en perfil y coincidencias"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        cert = self.certificador()
+        self.assertIn("Solicitud aprobada", texto(self.resolver(cert, 1, "aprobada", "Portafolio verificado")))
+        self.assertEqual(self.estado(), "aprobada")
+        self.assertIn("Certificada", texto(ana.get("/perfil")))
+        dani = self.usuario("Dani", "dani@a.com")
+        self.agregar(dani, "busco", "Programación", "Aprender Python")
+        self.assertIn("Certificada", texto(dani.get("/matches")))
+
+    def test_rechazar_y_volver_a_solicitar(self):
+        """CP-52 | El certificador rechaza con una observación | El solicitante ve la observación y puede volver a solicitar"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        cert = self.certificador()
+        self.resolver(cert, 1, "rechazada", "Falta evidencia de proyectos")
+        pagina = texto(ana.get("/certificacion"))
+        self.assertIn("Falta evidencia de proyectos", pagina)
+        self.assertIn("Solicitar certificación", pagina)
+        self.assertIn("Solicitud enviada", texto(self.solicitar(ana, hid)))
+        self.assertEqual(len(self.consulta("SELECT * FROM certificaciones")), 2)
+
+    def test_rechazo_sin_observacion(self):
+        """CP-53 | El certificador rechaza sin escribir una observación | No se permite y la solicitud sigue 'pendiente'"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        cert = self.certificador()
+        self.assertIn("Explica brevemente", texto(self.resolver(cert, 1, "rechazada", "")))
+        self.assertEqual(self.estado(), "pendiente")
+
+    def test_certificador_no_se_certifica_a_si_mismo(self):
+        """CP-54 | Un certificador intenta aprobar su propia solicitud | No se permite y no aparece en su cola"""
+        cert = self.certificador()
+        self.agregar(cert, "ofrezco", "Diseño", "Logo", 10)
+        self.solicitar(cert, self.id_habilidad("Logo"))
+        self.assertNotIn("Logo", texto(cert.get("/certificacion")).split("Solicitudes que resolviste")[0])
+        self.assertIn("No se pudo resolver", texto(self.resolver(cert, 1, "aprobada")))
+        self.assertEqual(self.estado(), "pendiente")
+
+    def test_no_resolver_dos_veces(self):
+        """CP-55 | Resolver una solicitud que ya fue aprobada | No se puede cambiar la decisión"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        cert = self.certificador()
+        self.resolver(cert, 1, "aprobada")
+        self.assertIn("No se pudo resolver", texto(self.resolver(cert, 1, "rechazada", "Cambio de opinión")))
+        self.assertEqual(self.estado(), "aprobada")
+
+    def test_cola_del_certificador(self):
+        """CP-56 | El certificador abre su vista | Ve las solicitudes pendientes con su evidencia, y las resueltas pasan al historial"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        cert = self.certificador()
+        pagina = texto(cert.get("/certificacion"))
+        self.assertIn("Solicitudes pendientes", pagina)
+        self.assertIn(self.EVIDENCIA, pagina)
+        self.resolver(cert, 1, "aprobada")
+        pagina = texto(cert.get("/certificacion"))
+        self.assertIn("No hay solicitudes pendientes", pagina)
+        self.assertIn("aprobada", pagina)
+
+    def test_evidencia_escapada(self):
+        """CP-57 | La evidencia contiene código <script> | Se muestra como texto, no se ejecuta"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid, "<script>alert(1)</script> evidencia")
+        cert = self.certificador()
+        pagina = texto(cert.get("/certificacion"))
+        self.assertNotIn("<script>alert(1)</script>", pagina)
+        self.assertIn("&lt;script&gt;", pagina)
+
+    def test_eliminar_habilidad_quita_solicitud_pendiente(self):
+        """CP-58 | Eliminar una habilidad con una solicitud pendiente | La solicitud pendiente también se elimina"""
+        ana, hid = self.preparar()
+        self.solicitar(ana, hid)
+        ana.post(f"/habilidad/{hid}/eliminar")
+        self.assertEqual(len(self.consulta("SELECT * FROM certificaciones")), 0)
+
+    def test_asignar_certificador(self):
+        """CP-59 | Asignar el rol de certificador a un correo registrado y a uno inexistente | Funciona con el registrado y falla con el inexistente"""
+        self.registrar(self.cliente(), "Ana", "ana@a.com")
+        self.assertTrue(asignar_certificador.asignar("ANA@a.com"))
+        self.assertEqual(self.consulta("SELECT rol FROM usuarios")[0]["rol"], "certificador")
+        self.assertFalse(asignar_certificador.asignar("nadie@a.com"))
+
 
 
 class PruebasCSRF(BaseTest):
