@@ -1,8 +1,10 @@
+import math
 import os
 import re
 import secrets
 import sqlite3
 import unicodedata
+from collections import Counter
 from functools import wraps
 from flask import (Flask, render_template, request, redirect,
                    url_for, flash, session, abort)
@@ -30,6 +32,74 @@ def palabras_clave(texto):
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
     return {p for p in re.findall(r"[a-z0-9]+", t)
             if len(p) >= 3 and p not in PALABRAS_VACIAS}
+
+
+# Grupos de términos relacionados: ayudan a detectar que "Java" y "Python" son programación.
+GRUPOS = {
+    "programacion": {"programacion", "python", "java", "javascript", "web", "codigo", "software",
+                     "app", "aplicacion", "desarrollo", "backend", "frontend", "datos", "html", "sql"},
+    "diseno": {"diseno", "logo", "branding", "marca", "afiche", "afiches", "grafico", "ilustracion",
+               "figma", "canva", "poster", "identidad"},
+    "marketing": {"marketing", "publicidad", "redes", "ventas", "campana", "social", "seo", "anuncios"},
+    "idiomas": {"ingles", "english", "frances", "aleman", "idioma", "idiomas", "conversacion", "toefl"},
+    "musica": {"musica", "guitarra", "piano", "canto", "bateria", "violin", "instrumento"},
+    "matematicas": {"matematicas", "calculo", "algebra", "estadistica", "geometria", "fisica"},
+}
+
+
+def tokens(texto):
+    """Palabras del texto más una etiqueta por cada grupo de términos relacionados."""
+    t = unicodedata.normalize("NFD", texto.lower())
+    t = "".join(c for c in t if unicodedata.category(c) != "Mn")
+    palabras = [p for p in re.findall(r"[a-z0-9]+", t)
+                if len(p) >= 3 and p not in PALABRAS_VACIAS]
+    etiquetas = [f"@{g}" for g, miembros in GRUPOS.items() if miembros & set(palabras)]
+    return palabras + etiquetas
+
+
+def similitud_texto(a, b, documentos):
+    """Similitud coseno TF-IDF (0 a 1) entre dos textos.
+
+    TF-IDF da más peso a las palabras poco frecuentes en el sistema; el coseno mide qué tan
+    parecidos son los dos vectores de palabras. 'documentos' es la lista de todos los
+    textos de habilidades, usada para calcular la rareza (IDF) de cada palabra.
+    """
+    df = Counter()
+    for doc in documentos:
+        df.update(set(tokens(doc)))
+    n = len(documentos)
+
+    def vector(texto):
+        return {t: c * (math.log((1 + n) / (1 + df[t])) + 1) for t, c in Counter(tokens(texto)).items()}
+
+    va, vb = vector(a), vector(b)
+    norma = math.sqrt(sum(v * v for v in va.values())) * math.sqrt(sum(v * v for v in vb.values()))
+    if norma == 0:
+        return 0.0
+    return sum(v * vb.get(t, 0.0) for t, v in va.items()) / norma
+
+
+def puntuar(similitud, mutuo, certificada, reputacion, cercania):
+    """Compatibilidad de 0 a 100 y el detalle de cómo se calculó.
+
+    Categoría 30 + texto 30 + match mutuo 20 + certificada 10 + reputación 5 + valor cercano 5.
+    """
+    detalle = [
+        ("Misma categoría", 30),
+        ("Similitud de texto", round(30 * similitud)),
+        ("Match mutuo", 20 if mutuo else 0),
+        ("Habilidad certificada", 10 if certificada else 0),
+        ("Reputación", round(5 * (reputacion or 0) / 5)),
+        ("Valor cercano", round(5 * cercania)),
+    ]
+    return sum(p for _, p in detalle), [(n, p) for n, p in detalle if p]
+
+
+def cercania_valor(valor, mis_valores):
+    """1.0 si algún valor mío es igual al suyo; baja hacia 0 cuando se alejan."""
+    if not mis_valores:
+        return 0.0
+    return max(1 - min(1, abs(valor - m) / max(valor, m, 1)) for m in mis_valores)
 
 
 def calcular_diferencia(valor_doy, valor_recibo):
@@ -318,6 +388,11 @@ def eliminar_habilidad(habilidad_id):
 @login_requerido
 def matches():
     yo = session["usuario_id"]
+    categoria = request.args.get("categoria", "")
+    categoria = categoria if categoria in CATEGORIAS else ""
+    solo_mutuo = request.args.get("solo_mutuo") == "1"
+    solo_cert = request.args.get("solo_certificadas") == "1"
+
     conn = get_db()
     mis_busco = conn.execute(
         "SELECT * FROM habilidades WHERE usuario_id = ? AND tipo = 'busco'", (yo,)
@@ -333,11 +408,13 @@ def matches():
     buscan = conn.execute(
         "SELECT * FROM habilidades WHERE usuario_id != ? AND tipo = 'busco'", (yo,)
     ).fetchall()
+    documentos = [f["nombre"] for f in conn.execute("SELECT nombre FROM habilidades")]
     reps = reputaciones(conn)
     certificadas = habilidades_certificadas(conn)
     conn.close()
 
     mis_categorias = {h["categoria"] for h in mis_ofrezco}
+    mis_valores = [h["valor"] for h in mis_ofrezco]
     resultados = []
     for b in mis_busco:
         kw_b = palabras_clave(b["nombre"])
@@ -348,20 +425,36 @@ def matches():
             mutuo_info = [x["nombre"] for x in buscan
                           if x["usuario_id"] == o["usuario_id"]
                           and x["categoria"] in mis_categorias]
+            rep = reps.get(o["usuario_id"])
+            puntaje, detalle = puntuar(
+                similitud_texto(b["nombre"], o["nombre"], documentos),
+                bool(mutuo_info), o["id"] in certificadas,
+                rep[0] if rep else 0, cercania_valor(o["valor"], mis_valores),
+            )
             resultados.append({
                 "otro_nombre": o["usuario_nombre"],
                 "su_hab": o,
                 "mi_busco": b,
-                "score": 1 + len(comunes),
+                "score": puntaje,
+                "detalle": detalle,
                 "kw": comunes,
                 "mutuo": bool(mutuo_info),
                 "mutuo_info": mutuo_info,
-                "rep": reps.get(o["usuario_id"]),
+                "rep": rep,
                 "certificada": o["id"] in certificadas,
             })
-    resultados.sort(key=lambda m: (m["mutuo"], m["score"], m["certificada"]), reverse=True)
-    return render_template("matches.html", matches=resultados,
-                           tiene_busco=bool(mis_busco))
+
+    if categoria:
+        resultados = [m for m in resultados if m["su_hab"]["categoria"] == categoria]
+    if solo_mutuo:
+        resultados = [m for m in resultados if m["mutuo"]]
+    if solo_cert:
+        resultados = [m for m in resultados if m["certificada"]]
+    resultados.sort(key=lambda m: (m["score"], m["mutuo"], m["certificada"]), reverse=True)
+
+    return render_template("matches.html", matches=resultados, tiene_busco=bool(mis_busco),
+                           categorias=CATEGORIAS, f_categoria=categoria,
+                           f_mutuo=solo_mutuo, f_cert=solo_cert)
 
 
 @app.route("/acuerdo/<int:su_id>", methods=["GET", "POST"])

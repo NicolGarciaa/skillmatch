@@ -14,7 +14,7 @@ MVP funcional (en desarrollo).
 
 - **Registro e inicio de sesión** de usuarios, con contraseñas almacenadas de forma segura (hash).
 - **Perfil con habilidades:** cada usuario registra las habilidades que ofrece y las que busca, con categoría y valor aproximado en pesos.
-- **Coincidencias (matching):** muestra quién ofrece algo de la misma categoría que lo que el usuario busca. Calcula una afinidad según las palabras en común y marca los **matches mutuos** (cuando ambos ofrecen lo que el otro busca).
+- **Coincidencias (matching):** muestra quién ofrece algo de la misma categoría que lo que el usuario busca y calcula una **compatibilidad de 0 a 100 %** que suma categoría, similitud de texto (TF-IDF con coseno y términos relacionados), match mutuo, certificación, reputación y cercanía de valor. Se puede filtrar por categoría, match mutuo y habilidades certificadas.
 - **Acuerdos económicos:** el usuario elige qué ofrece a cambio, el sistema calcula la diferencia de valor y se envía una propuesta. Quien la recibe puede aceptarla o rechazarla.
 - **Calificaciones y comentarios:** tras un acuerdo aceptado, cada persona puede calificar a la otra (1 a 5 estrellas y un comentario, una vez por intercambio). El promedio se muestra en el perfil, en las coincidencias y al proponer un acuerdo.
 - **Certificación de habilidades (versión simplificada):** el usuario solicita certificar una habilidad que ofrece, con una evidencia escrita; un usuario con rol *certificador* revisa la evidencia y la aprueba o la rechaza con una observación. Las habilidades aprobadas muestran la etiqueta **Certificada** en el perfil, las coincidencias y los acuerdos.
@@ -24,7 +24,7 @@ MVP funcional (en desarrollo).
 - Pagos con dinero real.
 - Validaciones legales o notariales externas.
 - Verificación automática de documentos o títulos (la evidencia es texto que revisa un certificador).
-- Modelo de Machine Learning para el matching (por ahora se usan reglas simples por categoría y palabras clave).
+- Modelo de Machine Learning entrenado para el matching (el actual usa similitud de texto TF-IDF y reglas ponderadas).
 
 ## Tecnologías
 
@@ -67,7 +67,7 @@ La base de datos (`instance/skillmatch.db`) se crea automáticamente la primera 
 
 ## Pruebas
 
-El proyecto incluye pruebas automáticas (59 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
+El proyecto incluye pruebas automáticas (66 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
 
 ```
 python -m unittest tests.test_skillmatch -v

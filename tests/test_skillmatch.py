@@ -578,6 +578,78 @@ class PruebasCertificacion(BaseTest):
 
 
 
+class PruebasCompatibilidad(BaseTest):
+    def test_similitud_texto(self):
+        """CP-60 | Calcular la similitud TF-IDF entre textos iguales, relacionados y sin relación | 1 si son iguales, entre 0 y 1 si se relacionan, 0 si no comparten nada"""
+        docs = ["Clases de Python", "Aprender Java", "Afiches", "Guitarra"]
+        self.assertAlmostEqual(skillmatch.similitud_texto("Clases de Python", "Clases de Python", docs), 1.0)
+        relacionado = skillmatch.similitud_texto("Aprender Java", "Clases de Python", docs)
+        self.assertTrue(0 < relacionado < 1)
+        self.assertEqual(skillmatch.similitud_texto("Guitarra", "Afiches", docs), 0.0)
+
+    def test_sinonimos_por_grupo(self):
+        """CP-61 | Comparar 'Logo' con 'Branding' (términos del mismo grupo de diseño) | Se detectan como relacionados aunque no compartan palabras"""
+        docs = ["Logo", "Branding", "Python"]
+        self.assertGreater(skillmatch.similitud_texto("Logo", "Branding", docs), 0)
+        self.assertEqual(skillmatch.similitud_texto("Logo", "Python", docs), 0.0)
+
+    def test_puntaje_y_detalle(self):
+        """CP-62 | Calcular la compatibilidad con todos los factores al máximo y al mínimo | Máximo 100 puntos, mínimo 30 (solo la categoría), con su detalle"""
+        total, detalle = skillmatch.puntuar(1.0, True, True, 5, 1.0)
+        self.assertEqual(total, 100)
+        self.assertEqual(sum(p for _, p in detalle), 100)
+        self.assertEqual(skillmatch.puntuar(0.0, False, False, 0, 0.0)[0], 30)
+
+    def test_valor_cercano(self):
+        """CP-63 | Comparar valores de habilidades cercanos y lejanos | Más cercanos dan más puntaje; sin habilidades propias da 0"""
+        self.assertEqual(skillmatch.cercania_valor(40000, [40000]), 1.0)
+        self.assertGreater(skillmatch.cercania_valor(40000, [35000]), skillmatch.cercania_valor(40000, [5000]))
+        self.assertEqual(skillmatch.cercania_valor(40000, []), 0.0)
+
+    def test_certificada_sube_en_la_lista(self):
+        """CP-64 | Dos personas ofrecen lo mismo y solo una está certificada | La certificada aparece primero con mayor compatibilidad"""
+        ana = self.usuario("Ana", "ana@a.com")
+        beto, caro = self.usuario("Beto", "beto@a.com"), self.usuario("Caro", "caro@a.com")
+        self.agregar(ana, "busco", "Programación", "Clases de Python")
+        self.agregar(beto, "ofrezco", "Programación", "Clases de Python", 30000)
+        self.agregar(caro, "ofrezco", "Programación", "Clases de Python", 30000)
+        conn = sqlite3.connect(self.ruta)
+        conn.execute("INSERT INTO certificaciones (habilidad_id, solicitante_id, nombre_habilidad, categoria, "
+                     "evidencia, estado) VALUES (?, 3, 'Clases de Python', 'Programación', 'evidencia larga', 'aprobada')",
+                     (self.consulta("SELECT id FROM habilidades WHERE usuario_id = 3")[0]["id"],))
+        conn.commit(); conn.close()
+        pagina = texto(ana.get("/matches"))
+        self.assertLess(pagina.index("Caro"), pagina.index("Beto"))
+
+    def test_muestra_compatibilidad(self):
+        """CP-65 | Abrir Coincidencias con un resultado | Muestra el porcentaje de compatibilidad y cómo se calculó"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        self.agregar(ana, "busco", "Diseño", "Logo")
+        self.agregar(beto, "ofrezco", "Diseño", "Logo y branding", 40000)
+        pagina = texto(ana.get("/matches"))
+        self.assertIn("Compatibilidad:", pagina)
+        self.assertIn("Misma categoría +30", pagina)
+
+    def test_filtros(self):
+        """CP-66 | Filtrar coincidencias por categoría, match mutuo y certificadas | Solo se muestran las que cumplen el filtro"""
+        ana = self.usuario("Ana", "ana@a.com")
+        beto, caro = self.usuario("Beto", "beto@a.com"), self.usuario("Caro", "caro@a.com")
+        self.agregar(ana, "ofrezco", "Música", "Guitarra", 10000)
+        self.agregar(ana, "busco", "Diseño", "Logo")
+        self.agregar(ana, "busco", "Marketing", "Publicidad")
+        self.agregar(beto, "ofrezco", "Diseño", "Afiches", 20000)
+        self.agregar(beto, "busco", "Música", "Clases de guitarra")
+        self.agregar(caro, "ofrezco", "Marketing", "Publicidad en redes", 20000)
+        todo = texto(ana.get("/matches"))
+        self.assertIn("Beto", todo); self.assertIn("Caro", todo)
+        por_categoria = texto(ana.get("/matches?categoria=Marketing"))
+        self.assertIn("Caro", por_categoria); self.assertNotIn("Beto", por_categoria)
+        solo_mutuo = texto(ana.get("/matches?solo_mutuo=1"))
+        self.assertIn("Beto", solo_mutuo); self.assertNotIn("Caro", solo_mutuo)
+        self.assertIn("No hay coincidencias con estos filtros", texto(ana.get("/matches?solo_certificadas=1")))
+        self.assertIn("Beto", texto(ana.get("/matches?categoria=NoExiste")))
+
+
 class PruebasCSRF(BaseTest):
     CSRF = True
 

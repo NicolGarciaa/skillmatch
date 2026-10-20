@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SkillMatch</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%231f4e79'/%3E%3Ctext x='50' y='68' font-size='56' text-anchor='middle' fill='white' font-family='Arial' font-weight='bold'%3ESM%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -12,15 +13,15 @@
       <a class="marca" href="/">SkillMatch</a>
       <nav class="menu">
         {% if session.get("usuario_id") %}
-          <a href="/perfil">Mi perfil</a>
-          <a href="/matches">Coincidencias</a>
-          <a href="/acuerdos">Mis acuerdos</a>
-          <a href="/certificacion">Certificación</a>
-          <a href="/calificaciones">Calificaciones</a>
+          <a href="/perfil"{% if request.path == "/perfil" %} class="activo"{% endif %}>Mi perfil</a>
+          <a href="/matches"{% if request.path == "/matches" %} class="activo"{% endif %}>Coincidencias</a>
+          <a href="/acuerdos"{% if request.path == "/acuerdos" %} class="activo"{% endif %}>Mis acuerdos</a>
+          <a href="/certificacion"{% if request.path == "/certificacion" %} class="activo"{% endif %}>Certificación</a>
+          <a href="/calificaciones"{% if request.path == "/calificaciones" %} class="activo"{% endif %}>Calificaciones</a>
           <a href="/logout">Cerrar sesión ({{ session["nombre"] }})</a>
         {% else %}
-          <a href="/registro">Registro</a>
-          <a href="/login">Iniciar sesión</a>
+          <a href="/registro"{% if request.path == "/registro" %} class="activo"{% endif %}>Registro</a>
+          <a href="/login"{% if request.path == "/login" %} class="activo"{% endif %}>Iniciar sesión</a>
         {% endif %}
       </nav>
     </div>
@@ -33,5 +34,6 @@
     </div>
     {% block contenido %}{% endblock %}
   </main>
+  <footer><div class="contenedor">SkillMatch · Proyecto Integrador de Área · UNINPAHU</div></footer>
 </body>
 </html>

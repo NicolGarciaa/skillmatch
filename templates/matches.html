@@ -1,32 +1,55 @@
 {% extends "base.html" %}
 {% block contenido %}
 <h2>Coincidencias</h2>
-<p>Personas que ofrecen algo de la misma categoría que lo que tú buscas.</p>
+<p>Personas que ofrecen algo de la misma categoría que lo que tú buscas, ordenadas por compatibilidad.</p>
 
 {% if not tiene_busco %}
   <p>Primero agrega en <a href="/perfil">Mi perfil</a> al menos una habilidad que buscas.</p>
-{% elif not matches %}
-  <p>Por ahora nadie ofrece algo que coincida con lo que buscas. Vuelve a revisar más tarde.</p>
 {% else %}
-  <ul>
-  {% for m in matches %}
-    <li>
-      <p>
-        <strong>{{ m.otro_nombre }}</strong>{% if m.rep %} <span class="rep">{{ m.rep[0]|estrellas }} {{ m.rep[0] }} ({{ m.rep[1] }})</span>{% endif %} ofrece
-        [{{ m.su_hab["categoria"] }}] {{ m.su_hab["nombre"] }} — ${{ m.su_hab["valor"] }}{% if m.certificada %} <span class="badge cert">Certificada</span>{% endif %}
-        {% if m.mutuo %}<span class="badge">Match mutuo</span>{% endif %}
-      </p>
-      <p>
-        Coincide con lo que buscas: {{ m.mi_busco["nombre"] }}.
-        Afinidad: {{ m.score }}
-        {% if m.kw %}(palabras en común: {{ m.kw|join(", ") }}){% endif %}
-      </p>
-      {% if m.mutuo %}
-        <p>Además, {{ m.otro_nombre }} busca: {{ m.mutuo_info|join(", ") }}.</p>
-      {% endif %}
-      <p><a href="/acuerdo/{{ m.su_hab['id'] }}">Proponer acuerdo</a></p>
-    </li>
-  {% endfor %}
-  </ul>
+  <form method="get" class="filtros">
+    <label>Categoría:
+      <select name="categoria">
+        <option value="">Todas</option>
+        {% for c in categorias %}
+          <option value="{{ c }}" {% if c == f_categoria %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="opcion"><input type="checkbox" name="solo_mutuo" value="1" {% if f_mutuo %}checked{% endif %}> Solo match mutuo</label>
+    <label class="opcion"><input type="checkbox" name="solo_certificadas" value="1" {% if f_cert %}checked{% endif %}> Solo certificadas</label>
+    <button type="submit">Filtrar</button>
+  </form>
+
+  {% if not matches %}
+    {% if f_categoria or f_mutuo or f_cert %}
+      <p>No hay coincidencias con estos filtros. Prueba quitar alguno.</p>
+    {% else %}
+      <p>Por ahora nadie ofrece algo que coincida con lo que buscas. Vuelve a revisar más tarde.</p>
+    {% endif %}
+  {% else %}
+    <ul>
+    {% for m in matches %}
+      <li>
+        <p>
+          <strong>{{ m.otro_nombre }}</strong>{% if m.rep %} <span class="rep">{{ m.rep[0]|estrellas }} {{ m.rep[0] }} ({{ m.rep[1] }})</span>{% endif %} ofrece
+          [{{ m.su_hab["categoria"] }}] {{ m.su_hab["nombre"] }} — ${{ m.su_hab["valor"] }}{% if m.certificada %} <span class="badge cert">Certificada</span>{% endif %}
+          {% if m.mutuo %}<span class="badge">Match mutuo</span>{% endif %}
+        </p>
+        <p class="compat">Compatibilidad: <strong>{{ m.score }}%</strong>
+          <span class="barra"><span style="width: {{ m.score }}%"></span></span></p>
+        <p class="detalle">
+          Coincide con lo que buscas: {{ m.mi_busco["nombre"] }}.
+          {% if m.kw %}Palabras en común: {{ m.kw|join(", ") }}.{% endif %}
+          Cómo se calculó:
+          {% for nombre, pts in m.detalle %}{{ nombre }} +{{ pts }}{% if not loop.last %} · {% endif %}{% endfor %}.
+        </p>
+        {% if m.mutuo %}
+          <p>Además, {{ m.otro_nombre }} busca: {{ m.mutuo_info|join(", ") }}.</p>
+        {% endif %}
+        <p><a href="/acuerdo/{{ m.su_hab['id'] }}">Proponer acuerdo</a></p>
+      </li>
+    {% endfor %}
+    </ul>
+  {% endif %}
 {% endif %}
 {% endblock %}

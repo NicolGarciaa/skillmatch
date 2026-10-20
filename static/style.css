@@ -107,3 +107,16 @@ textarea { max-width: 480px; }
 .estado-rechazada { background: #fbe4e2; color: var(--rojo); }
 button[value="aprobada"] { background: var(--verde); }
 button[value="rechazada"] { background: var(--rojo); }
+
+.menu a.activo { color: #fff; font-weight: 700; border-bottom: 2px solid #fff; }
+.filtros { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 18px; margin: 12px 0 16px;
+  background: #fff; border: 1px solid var(--borde); border-radius: 10px; padding: 12px 16px; }
+.filtros label { margin: 0; }
+.filtros .opcion { display: flex; align-items: center; gap: 6px; font-weight: 400; }
+.filtros .opcion input { display: inline; width: auto; margin: 0; }
+.compat { margin: 6px 0 2px; }
+.barra { display: inline-block; width: 140px; height: 8px; background: #e3e9ef; border-radius: 999px;
+  vertical-align: middle; margin-left: 8px; overflow: hidden; }
+.barra span { display: block; height: 100%; background: var(--verde); }
+.detalle { color: var(--gris); font-size: .88rem; }
+footer { color: var(--gris); font-size: .85rem; text-align: center; padding: 20px 0 30px; }
