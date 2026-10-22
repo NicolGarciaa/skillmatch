@@ -14,6 +14,7 @@ import unittest
 
 import app as skillmatch
 import asignar_certificador
+import datos_demo
 
 
 def texto(respuesta):
@@ -648,6 +649,85 @@ class PruebasCompatibilidad(BaseTest):
         self.assertIn("Beto", solo_mutuo); self.assertNotIn("Caro", solo_mutuo)
         self.assertIn("No hay coincidencias con estos filtros", texto(ana.get("/matches?solo_certificadas=1")))
         self.assertIn("Beto", texto(ana.get("/matches?categoria=NoExiste")))
+
+
+class PruebasFinales(BaseTest):
+    def test_cabeceras_de_seguridad(self):
+        """CP-67 | Revisar las cabeceras HTTP de cualquier respuesta | Incluyen protección contra clickjacking, sniffing y política de contenido"""
+        r = self.cliente().get("/")
+        self.assertEqual(r.headers["X-Frame-Options"], "DENY")
+        self.assertEqual(r.headers["X-Content-Type-Options"], "nosniff")
+        self.assertIn("default-src 'self'", r.headers["Content-Security-Policy"])
+
+    def test_cookie_de_sesion_segura(self):
+        """CP-68 | Revisar la cookie de sesión al iniciar sesión | Es HttpOnly y SameSite=Lax"""
+        c = self.cliente()
+        self.registrar(c, "Ana", "ana@a.com")
+        r = c.post("/login", data={"correo": "ana@a.com", "password": "123456"})
+        cookie = r.headers.get("Set-Cookie", "")
+        self.assertIn("HttpOnly", cookie)
+        self.assertIn("SameSite=Lax", cookie)
+
+    def test_pagina_404(self):
+        """CP-69 | Abrir una dirección que no existe | Muestra una página amable con error 404"""
+        r = self.cliente().get("/ruta-que-no-existe")
+        self.assertEqual(r.status_code, 404)
+        self.assertIn("Página no encontrada", texto(r))
+
+    def test_metodo_no_permitido(self):
+        """CP-70 | Abrir con GET una ruta que solo acepta POST (eliminar habilidad) | Responde 405 y no ejecuta la acción"""
+        c = self.usuario("Ana", "ana@a.com")
+        self.agregar(c, "ofrezco", "Diseño", "Logo", 10)
+        self.assertEqual(c.get(f"/habilidad/{self.id_habilidad('Logo')}/eliminar").status_code, 405)
+        self.assertEqual(len(self.consulta("SELECT * FROM habilidades")), 1)
+
+    def test_paginas_principales_responden(self):
+        """CP-71 | Abrir todas las páginas principales con sesión iniciada | Todas responden con código 200"""
+        c = self.usuario("Ana", "ana@a.com")
+        for ruta in ["/", "/perfil", "/matches", "/acuerdos", "/certificacion", "/calificaciones"]:
+            self.assertEqual(c.get(ruta).status_code, 200, ruta)
+
+    def test_flujo_completo(self):
+        """CP-72 | Recorrer el flujo completo: registro, habilidades, coincidencia, acuerdo, aceptación, calificación y certificación | Cada paso funciona y los datos quedan guardados"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        self.agregar(ana, "ofrezco", "Programación", "Clases de Python", 50000)
+        self.agregar(ana, "busco", "Diseño", "Logo")
+        self.agregar(beto, "ofrezco", "Diseño", "Logo y branding", 40000)
+        self.agregar(beto, "busco", "Programación", "Aprender Python")
+        self.assertIn("Match mutuo", texto(ana.get("/matches")))
+        py, logo = self.id_habilidad("Clases de Python"), self.id_habilidad("Logo y branding")
+        ana.post(f"/acuerdo/{logo}", data={"mi": str(py)})
+        beto.post("/acuerdo/1/responder", data={"accion": "aceptado"})
+        ana.post("/calificar/1", data={"puntuacion": "5", "comentario": "Excelente"})
+        beto.post("/calificar/1", data={"puntuacion": "4", "comentario": "Muy bien"})
+        ana.post(f"/certificacion/solicitar/{py}", data={"evidencia": "Cinco años enseñando Python"})
+        cert = self.cliente()
+        self.registrar(cert, "Cert", "cert@a.com"); asignar_certificador.asignar("cert@a.com"); self.entrar(cert, "cert@a.com")
+        cert.post("/certificacion/1/resolver", data={"accion": "aprobada", "observacion": "Verificado"})
+        self.assertEqual(self.consulta("SELECT estado FROM acuerdos")[0]["estado"], "aceptado")
+        self.assertEqual(len(self.consulta("SELECT * FROM calificaciones")), 2)
+        self.assertEqual(self.consulta("SELECT estado FROM certificaciones")[0]["estado"], "aprobada")
+        perfil = texto(ana.get("/perfil"))
+        self.assertIn("Certificada", perfil)
+        self.assertIn("4.0", perfil)
+
+    def test_datos_demo_idempotente(self):
+        """CP-73 | Cargar los datos de demostración dos veces seguidas | No se duplican usuarios, intercambios ni certificaciones"""
+        import io, contextlib
+        with contextlib.redirect_stdout(io.StringIO()):
+            datos_demo.main(); primero = [len(self.consulta(f"SELECT * FROM {t}")) for t in
+                                          ("usuarios", "habilidades", "acuerdos", "calificaciones", "certificaciones")]
+            datos_demo.main()
+        segundo = [len(self.consulta(f"SELECT * FROM {t}")) for t in
+                   ("usuarios", "habilidades", "acuerdos", "calificaciones", "certificaciones")]
+        self.assertEqual(primero, segundo)
+        self.assertEqual(primero[0], 5)
+
+    def test_privacidad_del_perfil(self):
+        """CP-74 | Un usuario abre su perfil teniendo habilidades de otros en el sistema | Solo ve sus propias habilidades"""
+        ana, beto = self.usuario("Ana", "ana@a.com"), self.usuario("Beto", "beto@a.com")
+        self.agregar(ana, "ofrezco", "Diseño", "Habilidad secreta de Ana", 10)
+        self.assertNotIn("Habilidad secreta de Ana", texto(beto.get("/perfil")))
 
 
 class PruebasCSRF(BaseTest):

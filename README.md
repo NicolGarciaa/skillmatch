@@ -65,9 +65,13 @@ MVP funcional (en desarrollo).
 
 La base de datos (`instance/skillmatch.db`) se crea automáticamente la primera vez que se ejecuta la aplicación.
 
+## Documentación
+
+En la carpeta `docs/` están el **manual técnico** (arquitectura, modelo de datos, rutas, algoritmo de compatibilidad, seguridad e instalación), el **manual de usuario** (guía paso a paso con capturas) y el **informe de pruebas**.
+
 ## Pruebas
 
-El proyecto incluye pruebas automáticas (66 casos) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
+El proyecto incluye pruebas automáticas (74 casos, cobertura cercana al 95 %) que usan una base de datos temporal. Para ejecutarlas, con el entorno virtual activado:
 
 ```
 python -m unittest tests.test_skillmatch -v
@@ -101,6 +105,7 @@ skillmatch/
 ├── requirements.txt  # Dependencias de Python
 ├── static/           # Estilos (style.css)
 ├── tests/            # Pruebas automáticas
+├── docs/             # Manuales e informe de pruebas
 └── templates/        # Páginas HTML
     ├── base.html
     ├── inicio.html

@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 app.secret_key = os.environ.get("SKILLMATCH_SECRET", "cambia-esta-clave")
 app.config.setdefault("CSRF", True)
+app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax")
 
 # La base de datos queda en la carpeta "instance", que el .gitignore de Python ya excluye
 os.makedirs(app.instance_path, exist_ok=True)
@@ -134,6 +135,24 @@ def verificar_csrf():
 @app.errorhandler(400)
 def solicitud_invalida(error):
     return "Solicitud no válida (falta el token de seguridad). Vuelve atrás y recarga la página.", 400
+
+
+@app.after_request
+def cabeceras_de_seguridad(respuesta):
+    """Cabeceras que protegen contra clickjacking, sniffing de tipos y carga de recursos externos."""
+    respuesta.headers["X-Content-Type-Options"] = "nosniff"
+    respuesta.headers["X-Frame-Options"] = "DENY"
+    respuesta.headers["Referrer-Policy"] = "same-origin"
+    respuesta.headers["Content-Security-Policy"] = (
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
+        "frame-ancestors 'none'; form-action 'self'"
+    )
+    return respuesta
+
+
+@app.errorhandler(404)
+def no_encontrada(error):
+    return render_template("404.html"), 404
 
 
 @app.errorhandler(403)
